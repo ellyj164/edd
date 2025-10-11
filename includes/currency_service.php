@@ -31,17 +31,26 @@ class CurrencyService {
     
     /**
      * Detect currency from country code
+     * Rwanda: RWF, EU countries: EUR, All others: USD
      */
     public function detectCurrency($countryCode) {
         $countryCode = strtoupper($countryCode);
-        $currency = $this->countryToCurrency[$countryCode] ?? 'USD';
         
-        // Fall back to USD if currency not supported
-        if (!in_array($currency, $this->supportedCurrencies)) {
-            return 'USD';
+        // Rwanda gets RWF
+        if ($countryCode === 'RW') {
+            return 'RWF';
         }
         
-        return $currency;
+        // EU countries get EUR
+        $euCountries = ['AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR', 
+                        'DE', 'GR', 'HU', 'IE', 'IT', 'LV', 'LT', 'LU', 'MT', 'NL', 
+                        'PL', 'PT', 'RO', 'SK', 'SI', 'ES', 'SE'];
+        if (in_array($countryCode, $euCountries)) {
+            return 'EUR';
+        }
+        
+        // All other countries get USD
+        return 'USD';
     }
     
     /**
