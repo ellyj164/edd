@@ -829,6 +829,8 @@ includeHeader($page_title);
 
 <!-- Embedded Stripe Elements JavaScript -->
 <script>
+// Wait for DOM and libraries to be fully loaded before initialization
+document.addEventListener('DOMContentLoaded', function() {
 (function() {
     'use strict';
     
@@ -836,186 +838,212 @@ includeHeader($page_title);
     const detectedCountry = '<?php echo addslashes($detectedCountry); ?>';
     const detectedCurrency = '<?php echo addslashes($detectedCurrency); ?>';
     
-    // Ensure Stripe.js is loaded
-    if (typeof Stripe === 'undefined') {
-        console.error('Stripe.js library not loaded');
-        const paymentMessage = document.getElementById('payment-message');
-        if (paymentMessage) {
-            paymentMessage.textContent = 'Payment system not available. Please refresh the page.';
-            paymentMessage.style.display = 'block';
-        }
-        return;
-    }
-    
-    // Get Stripe publishable key from page
-    const stripePublishableKey = '<?php echo addslashes($stripePublishableKey); ?>';
-    
-    console.log('Stripe publishable key:', stripePublishableKey ? 'Present' : 'Missing');
-    
-    if (!stripePublishableKey) {
-        console.error('Stripe publishable key not found');
-        const paymentMessage = document.getElementById('payment-message');
-        if (paymentMessage) {
-            paymentMessage.textContent = 'Payment system configuration error. Please contact support.';
-            paymentMessage.style.display = 'block';
-        }
-        return;
-    }
-    
-    // Initialize Stripe
-    console.log('Initializing Stripe...');
-    const stripe = Stripe(stripePublishableKey);
-    const elements = stripe.elements();
-    console.log('Stripe initialized successfully');
-    
-    // Create card elements with styling
-    const elementStyles = {
-        base: {
-            color: '#32325d',
-            fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
-            fontSmoothing: 'antialiased',
-            fontSize: '16px',
-            '::placeholder': {
-                color: '#aab7c4'
+    // Wait for all required libraries to be loaded
+    function waitForLibraries(callback) {
+        const checkInterval = setInterval(function() {
+            if (typeof Stripe !== 'undefined' && 
+                typeof jQuery !== 'undefined' && 
+                typeof jQuery.fn.select2 !== 'undefined' && 
+                typeof window.intlTelInput !== 'undefined') {
+                clearInterval(checkInterval);
+                callback();
             }
-        },
-        invalid: {
-            color: '#dc3545',
-            iconColor: '#dc3545'
-        }
-    };
-    
-    const elementClasses = {
-        focus: 'focused',
-        empty: 'empty',
-        invalid: 'invalid',
-    };
-    
-    // Create individual card elements
-    console.log('Creating Stripe card elements...');
-    const cardNumber = elements.create('cardNumber', {
-        style: elementStyles,
-        classes: elementClasses
-    });
-    const cardExpiry = elements.create('cardExpiry', {
-        style: elementStyles,
-        classes: elementClasses
-    });
-    const cardCvc = elements.create('cardCvc', {
-        style: elementStyles,
-        classes: elementClasses
-    });
-    console.log('Stripe card elements created');
-    
-    // Mount elements to DOM with error handling
-    try {
-        console.log('Mounting Stripe elements...');
-        cardNumber.mount('#card-number-element');
-        console.log('Card number element mounted');
-        cardExpiry.mount('#card-expiry-element');
-        console.log('Card expiry element mounted');
-        cardCvc.mount('#card-cvc-element');
-        console.log('Card CVC element mounted');
-        console.log('All Stripe elements mounted successfully');
-    } catch (error) {
-        console.error('Error mounting Stripe elements:', error);
-        const paymentMessage = document.getElementById('payment-message');
-        if (paymentMessage) {
-            paymentMessage.textContent = 'Error initializing payment form. Please refresh the page.';
-            paymentMessage.style.display = 'block';
-        }
-        return;
+        }, 50); // Check every 50ms
+        
+        // Timeout after 10 seconds
+        setTimeout(function() {
+            clearInterval(checkInterval);
+            if (typeof Stripe === 'undefined' || 
+                typeof jQuery === 'undefined' || 
+                typeof jQuery.fn.select2 === 'undefined' || 
+                typeof window.intlTelInput === 'undefined') {
+                console.error('Required libraries failed to load');
+                const paymentMessage = document.getElementById('payment-message');
+                if (paymentMessage) {
+                    paymentMessage.textContent = 'Payment system not available. Please refresh the page.';
+                    paymentMessage.style.display = 'block';
+                }
+            }
+        }, 10000);
     }
     
-    // Handle real-time validation errors
-    cardNumber.on('change', function(event) {
-        displayError(event);
-    });
-    
-    cardExpiry.on('change', function(event) {
-        displayError(event);
-    });
-    
-    cardCvc.on('change', function(event) {
-        displayError(event);
-    });
-    
-    function displayError(event) {
-        const displayError = document.getElementById('payment-message');
-        if (event.error) {
-            displayError.textContent = event.error.message;
-            displayError.style.display = 'block';
+    // Initialize everything once libraries are loaded
+    waitForLibraries(function() {
+        console.log('All libraries loaded, initializing checkout...');
+        
+        // Get Stripe publishable key from page
+        const stripePublishableKey = '<?php echo addslashes($stripePublishableKey); ?>';
+        
+        console.log('Stripe publishable key:', stripePublishableKey ? 'Present' : 'Missing');
+        
+        if (!stripePublishableKey) {
+            console.error('Stripe publishable key not found');
+            const paymentMessage = document.getElementById('payment-message');
+            if (paymentMessage) {
+                paymentMessage.textContent = 'Payment system configuration error. Please contact support.';
+                paymentMessage.style.display = 'block';
+            }
+            return;
+        }
+        
+        // Initialize Stripe
+        console.log('Initializing Stripe...');
+        const stripe = Stripe(stripePublishableKey);
+        const elements = stripe.elements();
+        console.log('Stripe initialized successfully');
+        
+        // Create card elements with styling
+        const elementStyles = {
+            base: {
+                color: '#32325d',
+                fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+                fontSmoothing: 'antialiased',
+                fontSize: '16px',
+                '::placeholder': {
+                    color: '#aab7c4'
+                }
+            },
+            invalid: {
+                color: '#dc3545',
+                iconColor: '#dc3545'
+            }
+        };
+        
+        const elementClasses = {
+            focus: 'focused',
+            empty: 'empty',
+            invalid: 'invalid',
+        };
+        
+        // Create individual card elements
+        console.log('Creating Stripe card elements...');
+        const cardNumber = elements.create('cardNumber', {
+            style: elementStyles,
+            classes: elementClasses
+        });
+        const cardExpiry = elements.create('cardExpiry', {
+            style: elementStyles,
+            classes: elementClasses
+        });
+        const cardCvc = elements.create('cardCvc', {
+            style: elementStyles,
+            classes: elementClasses
+        });
+        console.log('Stripe card elements created');
+        
+        // Mount elements to DOM with error handling
+        try {
+            console.log('Mounting Stripe elements...');
+            cardNumber.mount('#card-number-element');
+            console.log('Card number element mounted');
+            cardExpiry.mount('#card-expiry-element');
+            console.log('Card expiry element mounted');
+            cardCvc.mount('#card-cvc-element');
+            console.log('Card CVC element mounted');
+            console.log('All Stripe elements mounted successfully');
+        } catch (error) {
+            console.error('Error mounting Stripe elements:', error);
+            const paymentMessage = document.getElementById('payment-message');
+            if (paymentMessage) {
+                paymentMessage.textContent = 'Error initializing payment form. Please refresh the page.';
+                paymentMessage.style.display = 'block';
+            }
+            return;
+        }
+        
+        // Handle real-time validation errors
+        cardNumber.on('change', function(event) {
+            displayError(event);
+        });
+        
+        cardExpiry.on('change', function(event) {
+            displayError(event);
+        });
+        
+        cardCvc.on('change', function(event) {
+            displayError(event);
+        });
+        
+        function displayError(event) {
+            const displayError = document.getElementById('payment-message');
+            if (event.error) {
+                displayError.textContent = event.error.message;
+                displayError.style.display = 'block';
+            } else {
+                displayError.textContent = '';
+                displayError.style.display = 'none';
+            }
+        }
+        
+        // Initialize intl-tel-input for phone fields with enhanced features
+        let billingPhoneInput = null;
+        const billingPhoneField = document.getElementById('billing_phone');
+        
+        console.log('Initializing intl-tel-input...');
+        if (billingPhoneField && window.intlTelInput) {
+            billingPhoneInput = window.intlTelInput(billingPhoneField, {
+                // Use detected country or default to US
+                initialCountry: detectedCountry ? detectedCountry.toLowerCase() : 'us',
+                preferredCountries: ['us', 'rw', 'ca', 'gb', 'au', 'de', 'fr'],
+                separateDialCode: true,
+                // Enable search by name and dial code
+                searchPlaceholder: 'Search by country or code',
+                // Show all countries in dropdown
+                onlyCountries: [],
+                // Format as user types
+                autoPlaceholder: 'aggressive',
+                formatOnDisplay: true,
+                nationalMode: false,
+                // Load utils for formatting and validation
+                utilsScript: 'https://cdn.jsdelivr.net/npm/intl-tel-input@18.2.1/build/js/utils.js'
+            });
+            console.log('intl-tel-input initialized successfully');
+            
+            // Add validation on blur
+            billingPhoneField.addEventListener('blur', function() {
+                if (billingPhoneInput && billingPhoneInput.isValidNumber) {
+                    const isValid = billingPhoneInput.isValidNumber();
+                    const errorMsg = document.getElementById('phone-error');
+                    if (!isValid && this.value.trim()) {
+                        if (errorMsg) {
+                            errorMsg.textContent = 'Please enter a valid phone number for the selected country';
+                            errorMsg.style.display = 'block';
+                        }
+                        this.classList.add('invalid');
+                    } else {
+                        if (errorMsg) {
+                            errorMsg.style.display = 'none';
+                        }
+                        this.classList.remove('invalid');
+                    }
+                }
+            });
+            
+            // Sync phone country with country selector when user changes phone country
+            billingPhoneField.addEventListener('countrychange', function() {
+                if (billingPhoneInput) {
+                    const selectedCountryData = billingPhoneInput.getSelectedCountryData();
+                    const countryCode = selectedCountryData.iso2.toUpperCase();
+                    const billingCountrySelect = document.getElementById('billing_country');
+                    
+                    // Update country selector if different
+                    if (billingCountrySelect && billingCountrySelect.value !== countryCode) {
+                        billingCountrySelect.value = countryCode;
+                        // Trigger Select2 update
+                        if (typeof jQuery !== 'undefined' && jQuery.fn.select2) {
+                            jQuery(billingCountrySelect).trigger('change');
+                        }
+                        // Update currency display
+                        updateCurrency(countryCode);
+                    }
+                }
+            });
         } else {
-            displayError.textContent = '';
-            displayError.style.display = 'none';
+            console.error('intl-tel-input library not available');
         }
-    }
-    
-    // Initialize intl-tel-input for phone fields with enhanced features
-    let billingPhoneInput = null;
-    const billingPhoneField = document.getElementById('billing_phone');
-    
-    if (billingPhoneField && window.intlTelInput) {
-        billingPhoneInput = window.intlTelInput(billingPhoneField, {
-            // Use detected country or default to US
-            initialCountry: detectedCountry ? detectedCountry.toLowerCase() : 'us',
-            preferredCountries: ['us', 'rw', 'ca', 'gb', 'au', 'de', 'fr'],
-            separateDialCode: true,
-            // Enable search by name and dial code
-            searchPlaceholder: 'Search by country or code',
-            // Show all countries in dropdown
-            onlyCountries: [],
-            // Format as user types
-            autoPlaceholder: 'aggressive',
-            formatOnDisplay: true,
-            nationalMode: false,
-            // Load utils for formatting and validation
-            utilsScript: 'https://cdn.jsdelivr.net/npm/intl-tel-input@18.2.1/build/js/utils.js'
-        });
         
-        // Add validation on blur
-        billingPhoneField.addEventListener('blur', function() {
-            if (billingPhoneInput && billingPhoneInput.isValidNumber) {
-                const isValid = billingPhoneInput.isValidNumber();
-                const errorMsg = document.getElementById('phone-error');
-                if (!isValid && this.value.trim()) {
-                    if (errorMsg) {
-                        errorMsg.textContent = 'Please enter a valid phone number for the selected country';
-                        errorMsg.style.display = 'block';
-                    }
-                    this.classList.add('invalid');
-                } else {
-                    if (errorMsg) {
-                        errorMsg.style.display = 'none';
-                    }
-                    this.classList.remove('invalid');
-                }
-            }
-        });
-        
-        // Sync phone country with country selector when user changes phone country
-        billingPhoneField.addEventListener('countrychange', function() {
-            if (billingPhoneInput) {
-                const selectedCountryData = billingPhoneInput.getSelectedCountryData();
-                const countryCode = selectedCountryData.iso2.toUpperCase();
-                const billingCountrySelect = document.getElementById('billing_country');
-                
-                // Update country selector if different
-                if (billingCountrySelect && billingCountrySelect.value !== countryCode) {
-                    billingCountrySelect.value = countryCode;
-                    // Trigger Select2 update
-                    if (typeof jQuery !== 'undefined' && jQuery.fn.select2) {
-                        jQuery(billingCountrySelect).trigger('change');
-                    }
-                    // Update currency display
-                    updateCurrency(countryCode);
-                }
-            }
-        });
-    }
-    
-    // Comprehensive country list with flags, phone codes, and currencies
-    const countries = [
+        // Comprehensive country list with flags, phone codes, and currencies
+        const countries = [
         { code: 'AF', name: 'Afghanistan', flag: '🇦🇫', phone: '+93', currency: 'USD' },
         { code: 'AL', name: 'Albania', flag: '🇦🇱', phone: '+355', currency: 'USD' },
         { code: 'DZ', name: 'Algeria', flag: '🇩🇿', phone: '+213', currency: 'USD' },
@@ -1207,386 +1235,394 @@ includeHeader($page_title);
         { code: 'VN', name: 'Vietnam', flag: '🇻🇳', phone: '+84', currency: 'USD' },
         { code: 'YE', name: 'Yemen', flag: '🇾🇪', phone: '+967', currency: 'USD' },
         { code: 'ZM', name: 'Zambia', flag: '🇿🇲', phone: '+260', currency: 'USD' },
-        { code: 'ZW', name: 'Zimbabwe', flag: '🇿🇼', phone: '+263', currency: 'USD' }
-    ];
-    
-    // Function to populate country select
-    function populateCountrySelect(selectElement, defaultCode = 'US') {
-        if (!selectElement) return;
+            { code: 'ZW', name: 'Zimbabwe', flag: '🇿🇼', phone: '+263', currency: 'USD' }
+        ];
         
-        // Clear existing options except first (placeholder)
-        selectElement.innerHTML = '<option value="">Select country...</option>';
-        
-        // Sort countries alphabetically by name
-        const sortedCountries = [...countries].sort((a, b) => a.name.localeCompare(b.name));
-        
-        // Add all countries with flags
-        sortedCountries.forEach(country => {
-            const option = document.createElement('option');
-            option.value = country.code;
-            option.textContent = `${country.flag} ${country.name}`;
-            option.dataset.phone = country.phone;
-            option.dataset.currency = country.currency;
-            if (country.code === defaultCode) {
-                option.selected = true;
-            }
-            selectElement.appendChild(option);
-        });
-    }
-    
-    // Function to update phone input when country changes
-    function updatePhoneCountryCode(countryCode, phoneInputInstance) {
-        if (!phoneInputInstance) return;
-        
-        const country = countries.find(c => c.code === countryCode);
-        if (country && phoneInputInstance.setCountry) {
-            phoneInputInstance.setCountry(countryCode.toLowerCase());
-        }
-    }
-    
-    // Function to update currency display when country changes
-    function updateCurrency(countryCode) {
-        const country = countries.find(c => c.code === countryCode);
-        if (!country) return;
-        
-        // Display currency info to user
-        const currencyNote = document.getElementById('currency-note');
-        if (currencyNote) {
-            let currencySymbol = '$';
-            if (country.currency === 'EUR') currencySymbol = '€';
-            if (country.currency === 'RWF') currencySymbol = 'FRw';
+        // Function to populate country select
+        function populateCountrySelect(selectElement, defaultCode = 'US') {
+            if (!selectElement) return;
             
-            currencyNote.textContent = `Prices will be shown in ${country.currency} (${currencySymbol})`;
-            currencyNote.style.display = 'block';
+            // Clear existing options except first (placeholder)
+            selectElement.innerHTML = '<option value="">Select country...</option>';
+            
+            // Sort countries alphabetically by name
+            const sortedCountries = [...countries].sort((a, b) => a.name.localeCompare(b.name));
+            
+            // Add all countries with flags
+            sortedCountries.forEach(country => {
+                const option = document.createElement('option');
+                option.value = country.code;
+                option.textContent = `${country.flag} ${country.name}`;
+                option.dataset.phone = country.phone;
+                option.dataset.currency = country.currency;
+                if (country.code === defaultCode) {
+                    option.selected = true;
+                }
+                selectElement.appendChild(option);
+            });
         }
-    }
-    
-    // Populate country selects
-    const billingCountrySelect = document.getElementById('billing_country');
-    const shippingCountrySelect = document.getElementById('shipping_country');
-    
-    populateCountrySelect(billingCountrySelect, detectedCountry || 'US');
-    populateCountrySelect(shippingCountrySelect, detectedCountry || 'US');
-    
-    // Initialize Select2 for searchable country dropdowns with enhanced options
-    if (typeof jQuery !== 'undefined' && jQuery.fn.select2) {
-        jQuery('.country-select').select2({
-            placeholder: 'Select a country',
-            allowClear: false,
-            width: '100%',
-            // Support keyboard navigation
-            minimumResultsForSearch: 0,
-            // Custom matcher for searching by country name or dial code
-            matcher: function(params, data) {
-                // If there are no search terms, return all data
-                if (jQuery.trim(params.term) === '') {
-                    return data;
-                }
-                
-                // Skip if there is no 'text' property
-                if (typeof data.text === 'undefined') {
-                    return null;
-                }
-                
-                // Get the country data
-                const countryCode = jQuery(data.element).val();
-                const country = countries.find(c => c.code === countryCode);
-                
-                if (!country) {
-                    return null;
-                }
-                
-                // Convert search term to lowercase for case-insensitive search
-                const term = params.term.toLowerCase();
-                
-                // Search in country name
-                if (country.name.toLowerCase().indexOf(term) > -1) {
-                    return data;
-                }
-                
-                // Search in dial code (with or without +)
-                const dialCode = country.phone.replace('+', '');
-                if (dialCode.indexOf(term.replace('+', '')) > -1) {
-                    return data;
-                }
-                
-                // Search in country code
-                if (country.code.toLowerCase().indexOf(term) > -1) {
-                    return data;
-                }
-                
-                return null;
-            },
-            // ARIA labels for accessibility
-            language: {
-                inputTooShort: function() {
-                    return 'Type to search countries';
-                },
-                noResults: function() {
-                    return 'No country found';
-                },
-                searching: function() {
-                    return 'Searching...';
-                }
-            }
-        });
         
-        // Trigger initial currency update
-        if (billingCountrySelect.value) {
-            updateCurrency(billingCountrySelect.value);
+        // Function to update phone input when country changes
+        function updatePhoneCountryCode(countryCode, phoneInputInstance) {
+            if (!phoneInputInstance) return;
+            
+            const country = countries.find(c => c.code === countryCode);
+            if (country && phoneInputInstance.setCountry) {
+                phoneInputInstance.setCountry(countryCode.toLowerCase());
+            }
         }
-    }
-    
-    // Listen for country selection changes to update phone code and currency
-    if (billingCountrySelect) {
-        billingCountrySelect.addEventListener('change', function() {
-            updatePhoneCountryCode(this.value, billingPhoneInput);
-            updateCurrency(this.value);
-        });
-    }
-    
-    // Restore form values from sessionStorage (for persistence on validation errors)
-    function restoreFormValues() {
-        try {
-            const savedValues = sessionStorage.getItem('checkoutFormValues');
-            if (savedValues) {
-                const values = JSON.parse(savedValues);
+        
+        // Function to update currency display when country changes
+        function updateCurrency(countryCode) {
+            const country = countries.find(c => c.code === countryCode);
+            if (!country) return;
+            
+            // Display currency info to user
+            const currencyNote = document.getElementById('currency-note');
+            if (currencyNote) {
+                let currencySymbol = '$';
+                if (country.currency === 'EUR') currencySymbol = '€';
+                if (country.currency === 'RWF') currencySymbol = 'FRw';
                 
-                // Restore billing fields
-                if (values.billing_name) document.getElementById('billing_name').value = values.billing_name;
-                if (values.billing_phone) {
-                    document.getElementById('billing_phone').value = values.billing_phone;
-                    // Let intl-tel-input process the number
-                    if (billingPhoneInput && billingPhoneInput.setNumber) {
-                        billingPhoneInput.setNumber(values.billing_phone);
+                currencyNote.textContent = `Prices will be shown in ${country.currency} (${currencySymbol})`;
+                currencyNote.style.display = 'block';
+            }
+        }
+        
+        // Populate country selects
+        const billingCountrySelect = document.getElementById('billing_country');
+        const shippingCountrySelect = document.getElementById('shipping_country');
+        
+        console.log('Populating country selectors...');
+        populateCountrySelect(billingCountrySelect, detectedCountry || 'US');
+        populateCountrySelect(shippingCountrySelect, detectedCountry || 'US');
+        console.log('Country selectors populated');
+        
+        // Initialize Select2 for searchable country dropdowns with enhanced options
+        console.log('Initializing Select2...');
+        if (typeof jQuery !== 'undefined' && jQuery.fn.select2) {
+            jQuery('.country-select').select2({
+                placeholder: 'Select a country',
+                allowClear: false,
+                width: '100%',
+                // Support keyboard navigation
+                minimumResultsForSearch: 0,
+                // Custom matcher for searching by country name or dial code
+                matcher: function(params, data) {
+                    // If there are no search terms, return all data
+                    if (jQuery.trim(params.term) === '') {
+                        return data;
+                    }
+                    
+                    // Skip if there is no 'text' property
+                    if (typeof data.text === 'undefined') {
+                        return null;
+                    }
+                    
+                    // Get the country data
+                    const countryCode = jQuery(data.element).val();
+                    const country = countries.find(c => c.code === countryCode);
+                    
+                    if (!country) {
+                        return null;
+                    }
+                    
+                    // Convert search term to lowercase for case-insensitive search
+                    const term = params.term.toLowerCase();
+                    
+                    // Search in country name
+                    if (country.name.toLowerCase().indexOf(term) > -1) {
+                        return data;
+                    }
+                    
+                    // Search in dial code (with or without +)
+                    const dialCode = country.phone.replace('+', '');
+                    if (dialCode.indexOf(term.replace('+', '')) > -1) {
+                        return data;
+                    }
+                    
+                    // Search in country code
+                    if (country.code.toLowerCase().indexOf(term) > -1) {
+                        return data;
+                    }
+                    
+                    return null;
+                },
+                // ARIA labels for accessibility
+                language: {
+                    inputTooShort: function() {
+                        return 'Type to search countries';
+                    },
+                    noResults: function() {
+                        return 'No country found';
+                    },
+                    searching: function() {
+                        return 'Searching...';
                     }
                 }
-                if (values.billing_line1) document.getElementById('billing_line1').value = values.billing_line1;
-                if (values.billing_line2) document.getElementById('billing_line2').value = values.billing_line2;
-                if (values.billing_city) document.getElementById('billing_city').value = values.billing_city;
-                if (values.billing_state) document.getElementById('billing_state').value = values.billing_state;
-                if (values.billing_postal) document.getElementById('billing_postal').value = values.billing_postal;
-                if (values.billing_country) {
-                    document.getElementById('billing_country').value = values.billing_country;
-                    if (typeof jQuery !== 'undefined' && jQuery.fn.select2) {
-                        jQuery('#billing_country').trigger('change');
+            });
+            console.log('Select2 initialized successfully');
+            
+            // Trigger initial currency update
+            if (billingCountrySelect.value) {
+                updateCurrency(billingCountrySelect.value);
+            }
+        } else {
+            console.error('jQuery or Select2 not available');
+        }
+        
+        // Listen for country selection changes to update phone code and currency
+        if (billingCountrySelect) {
+            billingCountrySelect.addEventListener('change', function() {
+                updatePhoneCountryCode(this.value, billingPhoneInput);
+                updateCurrency(this.value);
+            });
+        }
+        
+        // Restore form values from sessionStorage (for persistence on validation errors)
+        function restoreFormValues() {
+            try {
+                const savedValues = sessionStorage.getItem('checkoutFormValues');
+                if (savedValues) {
+                    const values = JSON.parse(savedValues);
+                    
+                    // Restore billing fields
+                    if (values.billing_name) document.getElementById('billing_name').value = values.billing_name;
+                    if (values.billing_phone) {
+                        document.getElementById('billing_phone').value = values.billing_phone;
+                        // Let intl-tel-input process the number
+                        if (billingPhoneInput && billingPhoneInput.setNumber) {
+                            billingPhoneInput.setNumber(values.billing_phone);
+                        }
                     }
+                    if (values.billing_line1) document.getElementById('billing_line1').value = values.billing_line1;
+                    if (values.billing_line2) document.getElementById('billing_line2').value = values.billing_line2;
+                    if (values.billing_city) document.getElementById('billing_city').value = values.billing_city;
+                    if (values.billing_state) document.getElementById('billing_state').value = values.billing_state;
+                    if (values.billing_postal) document.getElementById('billing_postal').value = values.billing_postal;
+                    if (values.billing_country) {
+                        document.getElementById('billing_country').value = values.billing_country;
+                        if (typeof jQuery !== 'undefined' && jQuery.fn.select2) {
+                            jQuery('#billing_country').trigger('change');
+                        }
+                    }
+                    
+                    // Don't auto-restore after successful load
+                    sessionStorage.removeItem('checkoutFormValues');
+                }
+            } catch (error) {
+                console.error('Error restoring form values:', error);
+            }
+        }
+        
+        // Save form values to sessionStorage before submission
+        function saveFormValues() {
+            try {
+                const values = {
+                    billing_name: document.getElementById('billing_name').value,
+                    billing_phone: document.getElementById('billing_phone').value,
+                    billing_line1: document.getElementById('billing_line1').value,
+                    billing_line2: document.getElementById('billing_line2').value,
+                    billing_city: document.getElementById('billing_city').value,
+                    billing_state: document.getElementById('billing_state').value,
+                    billing_postal: document.getElementById('billing_postal').value,
+                    billing_country: document.getElementById('billing_country').value
+                };
+                sessionStorage.setItem('checkoutFormValues', JSON.stringify(values));
+            } catch (error) {
+                console.error('Error saving form values:', error);
+            }
+        }
+        
+        // Restore values on page load
+        restoreFormValues();
+        
+        // Handle form submission
+        const form = document.getElementById('checkout-form');
+        const checkoutButton = document.getElementById('checkout-button');
+        const buttonText = document.getElementById('button-text');
+        const spinner = document.getElementById('spinner');
+        const paymentMessage = document.getElementById('payment-message');
+        
+        if (!form) {
+            console.error('Checkout form not found');
+            return;
+        }
+        
+        // Handle "Same as billing" checkbox
+        const sameAsBillingCheckbox = document.getElementById('same_as_billing');
+        const shippingFields = document.getElementById('shipping_fields');
+        
+        if (sameAsBillingCheckbox && shippingFields) {
+            sameAsBillingCheckbox.addEventListener('change', function() {
+                if (this.checked) {
+                    shippingFields.style.display = 'none';
+                    // Clear required attributes on shipping fields
+                    const shippingInputs = shippingFields.querySelectorAll('input, select');
+                    shippingInputs.forEach(input => {
+                        input.removeAttribute('required');
+                    });
+                } else {
+                    shippingFields.style.display = 'block';
+                    // Add required attributes back to shipping fields (except optional ones)
+                    const requiredFields = ['shipping_name', 'shipping_phone', 'shipping_line1', 
+                                           'shipping_city', 'shipping_state', 'shipping_postal', 'shipping_country'];
+                    requiredFields.forEach(fieldId => {
+                        const field = document.getElementById(fieldId);
+                        if (field) field.setAttribute('required', 'required');
+                    });
+                }
+            });
+        }
+        
+        form.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            // Save form values for persistence
+            saveFormValues();
+            
+            // Validate phone number before submission
+            if (billingPhoneInput) {
+                const phoneField = document.getElementById('billing_phone');
+                const isValid = billingPhoneInput.isValidNumber ? billingPhoneInput.isValidNumber() : true;
+                
+                if (!isValid && phoneField.value.trim()) {
+                    const errorMsg = document.getElementById('phone-error');
+                    if (errorMsg) {
+                        errorMsg.textContent = 'Please enter a valid phone number for the selected country';
+                        errorMsg.style.display = 'block';
+                    }
+                    phoneField.classList.add('invalid');
+                    phoneField.focus();
+                    return;
                 }
                 
-                // Don't auto-restore after successful load
-                sessionStorage.removeItem('checkoutFormValues');
-            }
-        } catch (error) {
-            console.error('Error restoring form values:', error);
-        }
-    }
-    
-    // Save form values to sessionStorage before submission
-    function saveFormValues() {
-        try {
-            const values = {
-                billing_name: document.getElementById('billing_name').value,
-                billing_phone: document.getElementById('billing_phone').value,
-                billing_line1: document.getElementById('billing_line1').value,
-                billing_line2: document.getElementById('billing_line2').value,
-                billing_city: document.getElementById('billing_city').value,
-                billing_state: document.getElementById('billing_state').value,
-                billing_postal: document.getElementById('billing_postal').value,
-                billing_country: document.getElementById('billing_country').value
-            };
-            sessionStorage.setItem('checkoutFormValues', JSON.stringify(values));
-        } catch (error) {
-            console.error('Error saving form values:', error);
-        }
-    }
-    
-    // Restore values on page load
-    restoreFormValues();
-    
-    // Handle form submission
-    const form = document.getElementById('checkout-form');
-    const checkoutButton = document.getElementById('checkout-button');
-    const buttonText = document.getElementById('button-text');
-    const spinner = document.getElementById('spinner');
-    const paymentMessage = document.getElementById('payment-message');
-    
-    if (!form) {
-        console.error('Checkout form not found');
-        return;
-    }
-    
-    // Handle "Same as billing" checkbox
-    const sameAsBillingCheckbox = document.getElementById('same_as_billing');
-    const shippingFields = document.getElementById('shipping_fields');
-    
-    if (sameAsBillingCheckbox && shippingFields) {
-        sameAsBillingCheckbox.addEventListener('change', function() {
-            if (this.checked) {
-                shippingFields.style.display = 'none';
-                // Clear required attributes on shipping fields
-                const shippingInputs = shippingFields.querySelectorAll('input, select');
-                shippingInputs.forEach(input => {
-                    input.removeAttribute('required');
-                });
-            } else {
-                shippingFields.style.display = 'block';
-                // Add required attributes back to shipping fields (except optional ones)
-                const requiredFields = ['shipping_name', 'shipping_phone', 'shipping_line1', 
-                                       'shipping_city', 'shipping_state', 'shipping_postal', 'shipping_country'];
-                requiredFields.forEach(fieldId => {
-                    const field = document.getElementById(fieldId);
-                    if (field) field.setAttribute('required', 'required');
-                });
-            }
-        });
-    }
-    
-    form.addEventListener('submit', async function(e) {
-        e.preventDefault();
-        
-        // Save form values for persistence
-        saveFormValues();
-        
-        // Validate phone number before submission
-        if (billingPhoneInput) {
-            const phoneField = document.getElementById('billing_phone');
-            const isValid = billingPhoneInput.isValidNumber ? billingPhoneInput.isValidNumber() : true;
-            
-            if (!isValid && phoneField.value.trim()) {
-                const errorMsg = document.getElementById('phone-error');
-                if (errorMsg) {
-                    errorMsg.textContent = 'Please enter a valid phone number for the selected country';
-                    errorMsg.style.display = 'block';
+                // Format phone number in international format
+                if (billingPhoneInput.getNumber) {
+                    const formattedNumber = billingPhoneInput.getNumber();
+                    phoneField.value = formattedNumber;
                 }
-                phoneField.classList.add('invalid');
-                phoneField.focus();
-                return;
             }
             
-            // Format phone number in international format
-            if (billingPhoneInput.getNumber) {
-                const formattedNumber = billingPhoneInput.getNumber();
-                phoneField.value = formattedNumber;
-            }
-        }
-        
-        // Disable button to prevent double submission
-        setLoading(true);
-        
-        try {
-            // Collect address data
-            const billingAddress = {
-                name: document.getElementById('billing_name').value,
-                phone: document.getElementById('billing_phone').value,
-                address: {
-                    line1: document.getElementById('billing_line1').value,
-                    line2: document.getElementById('billing_line2').value || undefined,
-                    city: document.getElementById('billing_city').value,
-                    state: document.getElementById('billing_state').value,
-                    postal_code: document.getElementById('billing_postal').value,
-                    country: document.getElementById('billing_country').value
-                }
-            };
-
-            // Collect shipping address (same as billing if checkbox is checked)
-            let shippingAddress;
-            if (sameAsBillingCheckbox.checked) {
-                shippingAddress = billingAddress;
-            } else {
-                shippingAddress = {
-                    name: document.getElementById('shipping_name').value,
-                    phone: document.getElementById('shipping_phone').value,
+            // Disable button to prevent double submission
+            setLoading(true);
+            
+            try {
+                // Collect address data
+                const billingAddress = {
+                    name: document.getElementById('billing_name').value,
+                    phone: document.getElementById('billing_phone').value,
                     address: {
-                        line1: document.getElementById('shipping_line1').value,
-                        line2: document.getElementById('shipping_line2').value || undefined,
-                        city: document.getElementById('shipping_city').value,
-                        state: document.getElementById('shipping_state').value,
-                        postal_code: document.getElementById('shipping_postal').value,
-                        country: document.getElementById('shipping_country').value
+                        line1: document.getElementById('billing_line1').value,
+                        line2: document.getElementById('billing_line2').value || undefined,
+                        city: document.getElementById('billing_city').value,
+                        state: document.getElementById('billing_state').value,
+                        postal_code: document.getElementById('billing_postal').value,
+                        country: document.getElementById('billing_country').value
                     }
                 };
-            }
 
-            // Check if user wants to save card
-            const saveCard = document.getElementById('save_card').checked;
-
-            // Step 1: Create Payment Intent on server
-            console.log('Creating Payment Intent...');
-            const response = await fetch('/api/create-payment-intent.php', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    save_for_future: saveCard,
-                    billing_address: billingAddress,
-                    shipping_address: shippingAddress
-                })
-            });
-            
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({ error: 'Server error' }));
-                throw new Error(errorData.error || 'Failed to create payment intent');
-            }
-            
-            const data = await response.json();
-            
-            if (!data.success || !data.clientSecret) {
-                throw new Error(data.error || 'Invalid server response');
-            }
-            
-            console.log('Payment Intent created, confirming payment...');
-            
-            // Step 2: Confirm payment with Stripe
-            const {error, paymentIntent} = await stripe.confirmCardPayment(
-                data.clientSecret,
-                {
-                    payment_method: {
-                        card: cardNumber,
-                        billing_details: {
-                            name: billingAddress.name,
-                            email: document.getElementById('email').value,
-                            phone: billingAddress.phone,
-                            address: billingAddress.address
+                // Collect shipping address (same as billing if checkbox is checked)
+                let shippingAddress;
+                if (sameAsBillingCheckbox.checked) {
+                    shippingAddress = billingAddress;
+                } else {
+                    shippingAddress = {
+                        name: document.getElementById('shipping_name').value,
+                        phone: document.getElementById('shipping_phone').value,
+                        address: {
+                            line1: document.getElementById('shipping_line1').value,
+                            line2: document.getElementById('shipping_line2').value || undefined,
+                            city: document.getElementById('shipping_city').value,
+                            state: document.getElementById('shipping_state').value,
+                            postal_code: document.getElementById('shipping_postal').value,
+                            country: document.getElementById('shipping_country').value
                         }
-                    },
-                    shipping: shippingAddress
+                    };
                 }
-            );
-            
-            if (error) {
-                // Payment failed
-                throw new Error(error.message);
+
+                // Check if user wants to save card
+                const saveCard = document.getElementById('save_card').checked;
+
+                // Step 1: Create Payment Intent on server
+                console.log('Creating Payment Intent...');
+                const response = await fetch('/api/create-payment-intent.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        save_for_future: saveCard,
+                        billing_address: billingAddress,
+                        shipping_address: shippingAddress
+                    })
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({ error: 'Server error' }));
+                    throw new Error(errorData.error || 'Failed to create payment intent');
+                }
+                
+                const data = await response.json();
+                
+                if (!data.success || !data.clientSecret) {
+                    throw new Error(data.error || 'Invalid server response');
+                }
+                
+                console.log('Payment Intent created, confirming payment...');
+                
+                // Step 2: Confirm payment with Stripe
+                const {error, paymentIntent} = await stripe.confirmCardPayment(
+                    data.clientSecret,
+                    {
+                        payment_method: {
+                            card: cardNumber,
+                            billing_details: {
+                                name: billingAddress.name,
+                                email: document.getElementById('email').value,
+                                phone: billingAddress.phone,
+                                address: billingAddress.address
+                            }
+                        },
+                        shipping: shippingAddress
+                    }
+                );
+                
+                if (error) {
+                    // Payment failed
+                    throw new Error(error.message);
+                }
+                
+                if (paymentIntent.status === 'succeeded') {
+                    // Payment succeeded - redirect to success page
+                    console.log('Payment succeeded!');
+                    window.location.href = '/order-confirmation.php?ref=' + data.orderRef;
+                } else {
+                    throw new Error('Payment was not successful. Status: ' + paymentIntent.status);
+                }
+                
+            } catch (error) {
+                console.error('Checkout error:', error);
+                paymentMessage.textContent = error.message || 'An error occurred during checkout';
+                paymentMessage.style.display = 'block';
+                setLoading(false);
             }
-            
-            if (paymentIntent.status === 'succeeded') {
-                // Payment succeeded - redirect to success page
-                console.log('Payment succeeded!');
-                window.location.href = '/order-confirmation.php?ref=' + data.orderRef;
+        });
+        
+        function setLoading(isLoading) {
+            if (isLoading) {
+                checkoutButton.disabled = true;
+                buttonText.style.display = 'none';
+                spinner.style.display = 'block';
             } else {
-                throw new Error('Payment was not successful. Status: ' + paymentIntent.status);
+                checkoutButton.disabled = false;
+                buttonText.style.display = 'inline';
+                spinner.style.display = 'none';
             }
-            
-        } catch (error) {
-            console.error('Checkout error:', error);
-            paymentMessage.textContent = error.message || 'An error occurred during checkout';
-            paymentMessage.style.display = 'block';
-            setLoading(false);
         }
-    });
-    
-    function setLoading(isLoading) {
-        if (isLoading) {
-            checkoutButton.disabled = true;
-            buttonText.style.display = 'none';
-            spinner.style.display = 'block';
-        } else {
-            checkoutButton.disabled = false;
-            buttonText.style.display = 'inline';
-            spinner.style.display = 'none';
-        }
-    }
-})();
+    }); // End of waitForLibraries callback
+})(); // End of IIFE
+}); // End of DOMContentLoaded
 </script>
 
 <?php includeFooter(); ?>
