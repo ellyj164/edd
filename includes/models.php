@@ -121,7 +121,41 @@ class User extends BaseModel {
     }
     
     public function updatePassword($userId, $newPassword) {
-        return $this->update($userId, ['pass_hash' => hashPassword($newPassword)]);
+        $result = $this->update($userId, ['pass_hash' => hashPassword($newPassword)]);
+        
+        // Send security alert for password change
+        if ($result && function_exists('sendUserSecurityAlert')) {
+            sendUserSecurityAlert($userId, 'Password Changed', [
+                'Action' => 'Your password was successfully changed'
+            ]);
+        }
+        
+        return $result;
+    }
+    
+    public function update($id, $data) {
+        // Track what's being changed for security alerts
+        $sensitiveFields = ['email', 'username', 'phone'];
+        $changedSensitiveFields = [];
+        
+        foreach ($sensitiveFields as $field) {
+            if (isset($data[$field])) {
+                $changedSensitiveFields[] = ucfirst($field);
+            }
+        }
+        
+        // Call parent update
+        $result = parent::update($id, $data);
+        
+        // Send security alert if sensitive fields were changed
+        if ($result && !empty($changedSensitiveFields) && function_exists('sendUserSecurityAlert')) {
+            sendUserSecurityAlert($id, 'Account Information Changed', [
+                'Changed Fields' => implode(', ', $changedSensitiveFields),
+                'Action' => 'Your account information was updated'
+            ]);
+        }
+        
+        return $result;
     }
     
     public function verifyEmail($userId) {

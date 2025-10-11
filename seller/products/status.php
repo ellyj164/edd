@@ -31,10 +31,10 @@ $map = [
 ];
 $set = $map[$action] ?? $map['activate'];
 $pCols = db_columns_for_table('products');
-$updates=[];$params=[':id'=>$id, ':seller'=>Session::getUserId()];
+$updates=[];$params=[':id'=>$id, ':seller_id'=>Session::getUserId()];
 if ($set['status'] && db_has_col($pCols,'status')) { $updates[]="status=:status"; $params[':status']=$set['status']; }
 if ($set['visibility'] && db_has_col($pCols,'visibility')) { $updates[]="visibility=:visibility"; $params[':visibility']=$set['visibility']; }
 if (!$updates){ header('Location:/seller/products/'); exit; }
-Database::query("UPDATE products SET ".implode(',',$updates)." WHERE id=:id AND seller_id=:seller", $params);
+Database::query("UPDATE products SET ".implode(',',$updates)." WHERE id=:id AND seller_id=:seller_id", $params);
 header('Location:/seller/products/edit.php?id='.$id.'&msg=updated');
 exit;

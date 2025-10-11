@@ -95,6 +95,183 @@ function sendSecurityAlert($event, $details = []) {
 }
 
 /**
+ * Send security alert email to user
+ * @param int $userId User ID
+ * @param string $event Event type (e.g., 'New Login', 'Account Changed')
+ * @param array $details Additional details about the event
+ */
+function sendUserSecurityAlert($userId, $event, $details = []) {
+    try {
+        // Get user information
+        $user = Database::query("SELECT username, email, first_name, last_name FROM users WHERE id = ?", [$userId])->fetch();
+        if (!$user) {
+            error_log("User not found for security alert: " . $userId);
+            return false;
+        }
+        
+        $userName = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? '')) ?: $user['username'];
+        $userEmail = $user['email'];
+        
+        // Determine subject and message based on event type
+        $subject = "Security Alert: {$event}";
+        $message = "
+            <div style=\"font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;\">
+                <div style=\"background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 12px; margin-bottom: 20px;\">
+                    <h2 style=\"color: #856404; margin: 0 0 10px 0;\">🔐 Security Alert</h2>
+                    <p style=\"margin: 0; color: #856404; font-weight: bold;\">{$event}</p>
+                </div>
+                
+                <p>Dear {$userName},</p>
+                
+                <p>We detected the following activity on your account:</p>
+                
+                <div style=\"background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;\">
+                    <p style=\"margin: 5px 0;\"><strong>Event:</strong> {$event}</p>
+                    <p style=\"margin: 5px 0;\"><strong>Time:</strong> " . date('F j, Y, g:i a') . "</p>
+                    <p style=\"margin: 5px 0;\"><strong>IP Address:</strong> " . ($_SERVER['REMOTE_ADDR'] ?? 'Unknown') . "</p>
+                    <p style=\"margin: 5px 0;\"><strong>Device/Browser:</strong> " . ($_SERVER['HTTP_USER_AGENT'] ?? 'Unknown') . "</p>
+        ";
+        
+        if (!empty($details)) {
+            foreach ($details as $key => $value) {
+                $displayValue = is_array($value) ? json_encode($value) : $value;
+                $message .= "<p style=\"margin: 5px 0;\"><strong>" . htmlspecialchars($key) . ":</strong> " . htmlspecialchars($displayValue) . "</p>";
+            }
+        }
+        
+        $message .= "
+                </div>
+                
+                <p><strong>If this was you:</strong> No action is needed.</p>
+                
+                <p><strong>If this wasn't you:</strong> Please secure your account immediately:</p>
+                <ul>
+                    <li>Change your password</li>
+                    <li>Review your recent account activity</li>
+                    <li>Contact our support team if you need assistance</li>
+                </ul>
+                
+                <div style=\"margin-top: 30px; padding-top: 20px; border-top: 1px solid #e0e0e0;\">
+                    <p style=\"font-size: 12px; color: #666;\">
+                        This is an automated security notification. If you have any concerns, please contact our support team.
+                    </p>
+                    <p style=\"font-size: 12px; color: #666;\">
+                        <strong>Best regards,</strong><br>
+                        The Security Team
+                    </p>
+                </div>
+            </div>
+        ";
+        
+        return sendAdminNotification($userEmail, $subject, $message, 'high');
+    } catch (Exception $e) {
+        error_log("Failed to send user security alert: " . $e->getMessage());
+        return false;
+    }
+}
+
+/**
+ * Check if login is from new device/location and send alert
+ * @param int $userId User ID
+ * @param array $userInfo User information array
+ */
+function checkAndSendLoginAlert($userId, $userInfo) {
+    try {
+        $currentIp = $_SERVER['REMOTE_ADDR'] ?? 'Unknown';
+        $currentUserAgent = $_SERVER['HTTP_USER_AGENT'] ?? 'Unknown';
+        
+        // Check if we have seen this IP + User Agent combination before
+        $recentLogin = Database::query(
+            "SELECT id FROM user_sessions 
+             WHERE user_id = ? 
+             AND ip_address = ? 
+             AND user_agent = ? 
+             AND created_at > DATE_SUB(NOW(), INTERVAL 30 DAY)
+             LIMIT 1",
+            [$userId, $currentIp, $currentUserAgent]
+        )->fetch();
+        
+        // If no recent login from this device/IP, send alert
+        if (!$recentLogin) {
+            $deviceInfo = parseUserAgentSimple($currentUserAgent);
+            $locationInfo = geolocateIp($currentIp);
+            
+            $details = [
+                'Device Type' => $deviceInfo['device'] ?? 'Unknown',
+                'Browser' => $deviceInfo['browser'] ?? 'Unknown',
+                'Operating System' => $deviceInfo['os'] ?? 'Unknown',
+                'Location' => $locationInfo ?? 'Unknown'
+            ];
+            
+            sendUserSecurityAlert($userId, 'New Login from Unrecognized Device', $details);
+        }
+        
+        return true;
+    } catch (Exception $e) {
+        error_log("Failed to check login alert: " . $e->getMessage());
+        return false;
+    }
+}
+
+/**
+ * Simple user agent parser
+ */
+function parseUserAgentSimple($userAgent) {
+    $info = [];
+    
+    // Detect browser
+    if (preg_match('/Chrome\/[\d.]+/', $userAgent)) {
+        $info['browser'] = 'Google Chrome';
+    } elseif (preg_match('/Firefox\/[\d.]+/', $userAgent)) {
+        $info['browser'] = 'Mozilla Firefox';
+    } elseif (preg_match('/Safari\/[\d.]+/', $userAgent) && !preg_match('/Chrome/', $userAgent)) {
+        $info['browser'] = 'Safari';
+    } elseif (preg_match('/Edge\/[\d.]+/', $userAgent)) {
+        $info['browser'] = 'Microsoft Edge';
+    } else {
+        $info['browser'] = 'Unknown Browser';
+    }
+    
+    // Detect OS
+    if (preg_match('/Windows NT/', $userAgent)) {
+        $info['os'] = 'Windows';
+    } elseif (preg_match('/Mac OS X/', $userAgent)) {
+        $info['os'] = 'macOS';
+    } elseif (preg_match('/Linux/', $userAgent)) {
+        $info['os'] = 'Linux';
+    } elseif (preg_match('/Android/', $userAgent)) {
+        $info['os'] = 'Android';
+    } elseif (preg_match('/iOS|iPhone|iPad/', $userAgent)) {
+        $info['os'] = 'iOS';
+    } else {
+        $info['os'] = 'Unknown OS';
+    }
+    
+    // Detect device type
+    if (preg_match('/Mobile|Android|iPhone/', $userAgent)) {
+        $info['device'] = 'Mobile';
+    } elseif (preg_match('/Tablet|iPad/', $userAgent)) {
+        $info['device'] = 'Tablet';
+    } else {
+        $info['device'] = 'Desktop';
+    }
+    
+    return $info;
+}
+
+/**
+ * Simple IP geolocation (placeholder - integrate with GeoIP service)
+ */
+function geolocateIp($ip) {
+    // In production, integrate with a GeoIP service like MaxMind, IPinfo, or ip-api.com
+    // For now, return a placeholder
+    if ($ip === '127.0.0.1' || $ip === '::1') {
+        return 'Local/Localhost';
+    }
+    return 'Location Unknown (Integrate GeoIP service)';
+}
+
+/**
  * Send order status notification
  */
 function sendOrderStatusNotification($orderId, $oldStatus, $newStatus, $notes = '') {
