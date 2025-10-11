@@ -17,6 +17,11 @@
     font-style: normal;
     font-weight: 900;
     font-family: inherit;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
 
 /* Common icons using Unicode symbols */
@@ -43,6 +48,9 @@
 .fa-bolt:before { content: "⚡"; }
 .fa-tag:before { content: "🏷"; }
 .fa-gift:before { content: "🎁"; }
+.fa-share-alt:before { content: "⤴"; }
+.fa-ellipsis-v:before { content: "⋮"; }
+.fa-question-circle:before { content: "❓"; }
 
 /* Category icons */
 .fa-laptop:before { content: "💻"; }
@@ -70,7 +78,23 @@
 /* Size modifiers */
 .fa-xs { font-size: 0.75em; }
 .fa-sm { font-size: 0.875em; }
-.fa-lg { font-size: 1.33333em; }
-.fa-xl { font-size: 1.5em; }
+.fa-lg { font-size: 1.33333em; line-height: 0.75em; vertical-align: -0.0667em; }
+.fa-xl { font-size: 1.5em; line-height: 0.0625em; vertical-align: -0.125em; }
 .fa-2x { font-size: 2em; }
 .fa-3x { font-size: 3em; }
+
+/* Icon enhancement - better rendering */
+.fas, .fa {
+    text-rendering: optimizeLegibility;
+}
+
+/* Ensure icons don't break layout */
+.mobile-product-header-icon .fas,
+.mobile-product-header-icon .fa {
+    font-size: inherit;
+}
+
+.mobile-bottom-nav-icon.fas,
+.mobile-bottom-nav-icon.fa {
+    font-size: inherit;
+}
