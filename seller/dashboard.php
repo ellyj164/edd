@@ -348,7 +348,11 @@ includeHeader($page_title);
                         <?php foreach ($topProducts as $product): ?>
                             <div class="product-item">
                                 <div class="product-info">
-                                    <div class="product-name"><?php echo htmlspecialchars($product['name']); ?></div>
+                                    <div class="product-name">
+                                        <a href="/product.php?id=<?php echo $product['id']; ?>" target="_blank" style="color: inherit; text-decoration: none;">
+                                            <?php echo htmlspecialchars($product['name']); ?>
+                                        </a>
+                                    </div>
                                     <div class="product-price">$<?php echo number_format($product['price'], 2); ?></div>
                                 </div>
                                 <div class="product-stats">

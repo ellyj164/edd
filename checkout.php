@@ -1076,6 +1076,9 @@ includeHeader($page_title);
         const country = countries.find(c => c.code === countryCode);
         if (!country) return;
         
+        // Store selected currency in a variable for payment intent
+        window.selectedCurrency = country.currency;
+        
         // Display currency info to user
         const currencyNote = document.getElementById('currency-note');
         if (currencyNote) {
@@ -1083,7 +1086,18 @@ includeHeader($page_title);
             if (country.currency === 'EUR') currencySymbol = '€';
             if (country.currency === 'RWF') currencySymbol = 'FRw';
             
-            currencyNote.textContent = `Prices will be shown in ${country.currency} (${currencySymbol})`;
+            // Special message for Rwanda
+            if (countryCode === 'RW') {
+                currencyNote.textContent = `Payment will be processed in ${country.currency} (${currencySymbol}). Exchange rate will be applied automatically.`;
+                currencyNote.style.background = '#fff3cd';
+                currencyNote.style.borderLeftColor = '#ffc107';
+                currencyNote.style.color = '#856404';
+            } else {
+                currencyNote.textContent = `Prices will be shown in ${country.currency} (${currencySymbol})`;
+                currencyNote.style.background = '#e7f3ff';
+                currencyNote.style.borderLeftColor = '#0066cc';
+                currencyNote.style.color = '#0066cc';
+            }
             currencyNote.style.display = 'block';
         }
     }
@@ -1347,7 +1361,8 @@ includeHeader($page_title);
                 body: JSON.stringify({
                     save_for_future: saveCard,
                     billing_address: billingAddress,
-                    shipping_address: shippingAddress
+                    shipping_address: shippingAddress,
+                    currency: window.selectedCurrency || detectedCurrency
                 })
             });
             

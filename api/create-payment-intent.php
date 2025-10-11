@@ -56,6 +56,20 @@ try {
     $giftCardCode = $requestData['gift_card_code'] ?? null;
     $selectedCurrency = $requestData['currency'] ?? $_SESSION['detected_currency'] ?? 'USD';
     
+    // ENFORCE: Rwanda must use RWF currency only
+    $billingCountry = null;
+    if ($billingAddress && isset($billingAddress['address']['country'])) {
+        $billingCountry = strtoupper($billingAddress['address']['country']);
+    }
+    
+    if ($billingCountry === 'RW') {
+        // Force RWF for Rwanda
+        $selectedCurrency = 'RWF';
+    } elseif ($selectedCurrency === 'RWF' && $billingCountry !== 'RW') {
+        // Prevent non-Rwanda users from using RWF
+        throw new Exception('RWF currency is only available for Rwanda');
+    }
+    
     // Get cart items
     $cart = new Cart();
     $cartItems = $cart->getCartItems($userId);
