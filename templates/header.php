@@ -1054,58 +1054,44 @@ $page_title = $page_title ?? 'Feza - Electronics, Cars, Fashion, Collectibles & 
             }
             
             // Mobile scroll behavior - only on mobile devices
-            function initMobileScrollBehavior() {
-                // Check if mobile
+            let lastScrollTop = 0;
+            let scrollThreshold = 5; // Minimum scroll distance to trigger
+            let ticking = false;
+            
+            function handleScroll() {
+                // Check if mobile - if not, skip
                 if (window.innerWidth > 768) return;
                 
-                let lastScrollTop = 0;
-                let scrollThreshold = 5; // Minimum scroll distance to trigger
-                let ticking = false;
+                const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+                const header = document.querySelector('.feza-main-header');
                 
-                function handleScroll() {
-                    const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-                    const header = document.querySelector('.feza-main-header');
-                    
-                    if (!header) return;
-                    
-                    // Only trigger if scroll is beyond threshold
-                    if (Math.abs(scrollTop - lastScrollTop) < scrollThreshold) {
-                        ticking = false;
-                        return;
-                    }
-                    
-                    if (scrollTop > lastScrollTop && scrollTop > 50) {
-                        // Scrolling down
-                        header.classList.add('scroll-down');
-                        header.classList.remove('scroll-up');
-                    } else {
-                        // Scrolling up
-                        header.classList.remove('scroll-down');
-                        header.classList.add('scroll-up');
-                    }
-                    
-                    lastScrollTop = scrollTop <= 0 ? 0 : scrollTop;
+                if (!header) return;
+                
+                // Only trigger if scroll is beyond threshold
+                if (Math.abs(scrollTop - lastScrollTop) < scrollThreshold) {
                     ticking = false;
+                    return;
                 }
                 
-                window.addEventListener('scroll', function() {
-                    if (!ticking) {
-                        window.requestAnimationFrame(handleScroll);
-                        ticking = true;
-                    }
-                });
+                if (scrollTop > lastScrollTop && scrollTop > 50) {
+                    // Scrolling down
+                    header.classList.add('scroll-down');
+                    header.classList.remove('scroll-up');
+                } else {
+                    // Scrolling up
+                    header.classList.remove('scroll-down');
+                    header.classList.add('scroll-up');
+                }
+                
+                lastScrollTop = scrollTop <= 0 ? 0 : scrollTop;
+                ticking = false;
             }
             
-            // Initialize on load
-            initMobileScrollBehavior();
-            
-            // Re-initialize on resize (handles device rotation)
-            let resizeTimer;
-            window.addEventListener('resize', function() {
-                clearTimeout(resizeTimer);
-                resizeTimer = setTimeout(function() {
-                    initMobileScrollBehavior();
-                }, 250);
+            window.addEventListener('scroll', function() {
+                if (!ticking) {
+                    window.requestAnimationFrame(handleScroll);
+                    ticking = true;
+                }
             });
         });
     </script>
