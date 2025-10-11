@@ -60,8 +60,8 @@
 }
 
 .feza-ai-button {
-    width: 60px;
-    height: 60px;
+    width: 50px;
+    height: 50px;
     border-radius: 50%;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     border: none;
@@ -81,10 +81,10 @@
 }
 
 .feza-ai-button .feza-ai-question-mark {
-    font-size: 2.25rem; /* 36px equivalent but responsive */
+    font-size: 1.5rem; /* 24px - smaller than before */
     font-weight: 700;
     line-height: 1;
-    max-height: 38px; /* Prevent overflow on zoom */
+    max-height: 28px;
 }
 
 .feza-ai-badge {
@@ -381,20 +381,24 @@
 
 @media (max-width: 768px) {
     .feza-ai-widget {
-        bottom: 10px;
-        right: 10px;
+        bottom: 80px; /* Position above bottom navigation bar */
+        right: 16px;
     }
     
     .feza-ai-chat {
         width: calc(100vw - 20px);
-        height: calc(100vh - 100px);
-        bottom: 70px;
+        height: calc(100vh - 160px); /* Account for top header and bottom nav */
+        bottom: 140px; /* Position above the button which is above bottom nav */
         right: -10px;
     }
     
     .feza-ai-button {
-        width: 56px;
-        height: 56px;
+        width: 48px;
+        height: 48px;
+    }
+    
+    .feza-ai-button .feza-ai-question-mark {
+        font-size: 1.25rem; /* 20px - even smaller on mobile */
     }
 }
 </style>

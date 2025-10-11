@@ -447,6 +447,51 @@ if (file_exists(__DIR__ . '/templates/header.php')) {
         padding: 0 4px;
     }
     
+    /* Mobile Search Bar Styles */
+    .mobile-product-search {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 56px;
+        background: white;
+        display: none;
+        align-items: center;
+        padding: 0 12px;
+        gap: 12px;
+        z-index: 1101;
+    }
+    
+    .mobile-product-search.active {
+        display: flex;
+    }
+    
+    .mobile-product-search-input {
+        flex: 1;
+        height: 40px;
+        border: 1px solid #e5e5e5;
+        border-radius: 20px;
+        padding: 0 16px;
+        font-size: 16px;
+        outline: none;
+    }
+    
+    .mobile-product-search-input:focus {
+        border-color: #0654ba;
+    }
+    
+    .mobile-product-search-close {
+        background: none;
+        border: none;
+        font-size: 24px;
+        color: #333;
+        cursor: pointer;
+        padding: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
     /* Adjust body padding to account for fixed header on product pages */
     body.product-page {
         padding-top: 56px;
@@ -872,7 +917,7 @@ if (file_exists(__DIR__ . '/templates/header.php')) {
 </style>
 
 <!-- Mobile Product Header - Only visible on mobile -->
-<div class="mobile-product-header">
+<div class="mobile-product-header" id="mobileProductHeader">
     <div class="mobile-product-header-left">
         <button class="mobile-product-header-back" onclick="goBack()" aria-label="Go back">
             <i class="fas fa-arrow-left"></i>
@@ -880,7 +925,7 @@ if (file_exists(__DIR__ . '/templates/header.php')) {
         <h1 class="mobile-product-header-title">Item</h1>
     </div>
     <div class="mobile-product-header-right">
-        <button class="mobile-product-header-icon" onclick="openMobileSearch()" aria-label="Search">
+        <button class="mobile-product-header-icon" onclick="toggleMobileSearch()" aria-label="Search" id="mobileSearchIcon">
             <i class="fas fa-search"></i>
         </button>
         <button class="mobile-product-header-icon" onclick="window.location.href='/cart.php'" aria-label="Cart">
@@ -896,6 +941,20 @@ if (file_exists(__DIR__ . '/templates/header.php')) {
             <i class="fas fa-ellipsis-v"></i>
         </button>
     </div>
+</div>
+
+<!-- Mobile Search Bar - Hidden by default, shown when search icon is clicked -->
+<div class="mobile-product-search" id="mobileProductSearch">
+    <button class="mobile-product-search-close" onclick="toggleMobileSearch()" aria-label="Close search">
+        <i class="fas fa-arrow-left"></i>
+    </button>
+    <form onsubmit="handleMobileSearchSubmit(event)" style="flex: 1; display: flex;">
+        <input type="text" 
+               class="mobile-product-search-input" 
+               id="mobileSearchInput"
+               placeholder="Search for anything" 
+               aria-label="Search products">
+    </form>
 </div>
 
 <div class="product-container">
@@ -1412,9 +1471,37 @@ function goBack() {
     }
 }
 
+function toggleMobileSearch() {
+    const searchBar = document.getElementById('mobileProductSearch');
+    const header = document.getElementById('mobileProductHeader');
+    const searchInput = document.getElementById('mobileSearchInput');
+    
+    if (searchBar.classList.contains('active')) {
+        // Hide search bar, show header
+        searchBar.classList.remove('active');
+        header.style.display = 'flex';
+    } else {
+        // Show search bar, hide header
+        searchBar.classList.add('active');
+        header.style.display = 'none';
+        // Focus on search input
+        setTimeout(() => searchInput.focus(), 100);
+    }
+}
+
+function handleMobileSearchSubmit(event) {
+    event.preventDefault();
+    const searchInput = document.getElementById('mobileSearchInput');
+    const query = searchInput.value.trim();
+    
+    if (query) {
+        window.location.href = '/search.php?q=' + encodeURIComponent(query);
+    }
+}
+
 function openMobileSearch() {
-    // Redirect to search page or open search modal
-    window.location.href = '/search.php';
+    // Legacy function - redirect to toggleMobileSearch
+    toggleMobileSearch();
 }
 
 function shareProduct() {
