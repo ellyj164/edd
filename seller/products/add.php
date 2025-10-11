@@ -161,7 +161,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($form['category_id'] !== '' && !ctype_digit((string)$form['category_id'])) {
             $errors['category_id'] = 'Invalid category.';
         }
-        if ($form['brand_id'] !== '' && !ctype_digit((string)$form['brand_id'])) {
+        
+        // Handle "other" brand option
+        if ($form['brand_id'] === 'other') {
+            $newBrandName = trim($_POST['new_brand_name'] ?? '');
+            if (empty($newBrandName)) {
+                $errors['brand_id'] = 'Please enter a brand name.';
+            }
+        } elseif ($form['brand_id'] !== '' && !ctype_digit((string)$form['brand_id'])) {
             $errors['brand_id'] = 'Invalid brand.';
         }
 
@@ -175,7 +182,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             
             // Auto-generate SKU if not provided
             if ($sku === '') {
-                $sku = 'V' . $vendorId . '-' . strtoupper(substr(preg_replace('/[^a-zA-Z0-9]/', '', $name), 0, 6)) . '-' . time();
+                // Generate unique SKU: VendorID-ProductInitials-RandomString
+                $initials = strtoupper(substr(preg_replace('/[^a-zA-Z0-9]/', '', $name), 0, 4));
+                $random = strtoupper(substr(bin2hex(random_bytes(3)), 0, 6));
+                $sku = "V{$vendorId}-{$initials}-{$random}";
+                
+                // Ensure uniqueness by checking database
+                $skuExists = true;
+                $attempts = 0;
+                while ($skuExists && $attempts < 5) {
+                    $checkSku = Database::query("SELECT id FROM products WHERE sku = ?", [$sku])->fetch();
+                    if (!$checkSku) {
+                        $skuExists = false;
+                    } else {
+                        // Generate new random part if SKU exists
+                        $random = strtoupper(substr(bin2hex(random_bytes(3)), 0, 6));
+                        $sku = "V{$vendorId}-{$initials}-{$random}";
+                        $attempts++;
+                    }
+                }
             }
 
             $price          = toNumericOrNull($form['price']);
@@ -189,7 +214,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $sale_end_date   = toNullIfEmpty($form['sale_end_date']);
 
             $category_id     = toNullIfEmpty($form['category_id']);
+            
+            // Handle brand creation if "other" was selected
             $brand_id        = toNullIfEmpty($form['brand_id']);
+            if ($brand_id === 'other') {
+                $newBrandName = trim($_POST['new_brand_name'] ?? '');
+                if (!empty($newBrandName)) {
+                    // Create slug for brand
+                    $brandSlug = slugify($newBrandName);
+                    
+                    // Check if brand already exists
+                    $existingBrand = Database::query("SELECT id FROM brands WHERE slug = ?", [$brandSlug])->fetch();
+                    if ($existingBrand) {
+                        $brand_id = $existingBrand['id'];
+                    } else {
+                        // Create new brand
+                        Database::query(
+                            "INSERT INTO brands (name, slug, description, is_active, created_at, updated_at) VALUES (?, ?, ?, 1, NOW(), NOW())",
+                            [$newBrandName, $brandSlug, "Added by seller"]
+                        );
+                        $brand_id = Database::lastInsertId();
+                    }
+                } else {
+                    $brand_id = null;
+                }
+            }
+            
             $tags            = trim((string)$form['tags']);
 
             $track_inventory = toBool($form['track_inventory'] ?? 0);
@@ -227,6 +277,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $digital_delivery_info = trim((string)($form['digital_delivery_info'] ?? ''));
             $download_limit  = toNumericOrNull($form['download_limit'] ?? '');
             $expiry_days     = toNumericOrNull($form['expiry_days'] ?? '');
+            $digital_url     = trim((string)($_POST['digital_url'] ?? ''));
+            $digital_file_path = null;
+            
+            // Handle digital file upload
+            if ($is_digital && isset($_FILES['digital_file']) && $_FILES['digital_file']['error'] === UPLOAD_ERR_OK) {
+                $uploadDir = __DIR__ . '/../../uploads/digital_products/';
+                if (!is_dir($uploadDir)) {
+                    mkdir($uploadDir, 0755, true);
+                }
+                
+                $fileExtension = pathinfo($_FILES['digital_file']['name'], PATHINFO_EXTENSION);
+                $safeFilename = $sku . '_' . time() . '.' . $fileExtension;
+                $uploadPath = $uploadDir . $safeFilename;
+                
+                if (move_uploaded_file($_FILES['digital_file']['tmp_name'], $uploadPath)) {
+                    $digital_file_path = 'uploads/digital_products/' . $safeFilename;
+                }
+            }
 
             try {
                 Database::beginTransaction();
@@ -251,6 +319,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'meta_keywords' => $meta_keywords, 'focus_keyword' => $focus_keyword,
                     'is_digital' => $is_digital, 'digital_delivery_info' => $digital_delivery_info,
                     'download_limit' => $download_limit, 'expiry_days' => $expiry_days,
+                    'digital_url' => $digital_url, 'digital_file_path' => $digital_file_path,
                     'created_at' => $now, 'updated_at' => $now,
                 ];
 
@@ -763,14 +832,22 @@ includeHeader($page_title);
                     </div>
                     <div>
                         <label class="form-label">Brand</label>
-                        <select name="brand_id" class="form-select <?= isset($errors['brand_id'])?'is-invalid':''; ?>">
+                        <select name="brand_id" id="brand_id" class="form-select <?= isset($errors['brand_id'])?'is-invalid':''; ?>" onchange="toggleOtherBrandField(this.value)">
                             <option value="">-- Select Brand --</option>
                             <?php foreach ($allBrands as $b): ?>
                                 <option value="<?= (int)$b['id'] ?>" <?= ($form['brand_id']==$b['id']?'selected':'') ?>><?= h($b['name']) ?></option>
                             <?php endforeach; ?>
-                    </select>
-                    <?php if (isset($errors['brand_id'])): ?><div class="invalid-feedback"><?= h($errors['brand_id']) ?></div><?php endif; ?>
-                </div>
+                            <option value="other">Other (Enter new brand)</option>
+                        </select>
+                        <?php if (isset($errors['brand_id'])): ?><div class="invalid-feedback"><?= h($errors['brand_id']) ?></div><?php endif; ?>
+                        
+                        <!-- New brand input field (hidden by default) -->
+                        <div id="new_brand_field" style="display: none; margin-top: 10px;">
+                            <label class="form-label">New Brand Name</label>
+                            <input type="text" name="new_brand_name" id="new_brand_name" class="form-control" placeholder="Enter brand name">
+                            <small class="form-text text-muted">This will create a new brand in the system</small>
+                        </div>
+                    </div>
                 <div class="col-12">
                     <label class="form-label">Short Description</label>
                     <textarea name="short_description" class="form-control" rows="2"><?= h($form['short_description']) ?></textarea>
@@ -862,7 +939,40 @@ includeHeader($page_title);
                 <div id="digitalProductFields" style="display: none;">
                     <div class="alert alert-info">
                         <i class="fas fa-info-circle me-2"></i>
-                        <strong>Note:</strong> Upload your digital files after creating the product using the "Manage Digital Files" option in the product details page.
+                        <strong>Digital Product Setup:</strong> Choose how to deliver your digital product to customers.
+                    </div>
+                    
+                    <!-- Digital Product Delivery Method -->
+                    <div class="mb-4">
+                        <label class="form-label"><strong>Delivery Method</strong></label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="digital_delivery_method" value="file" id="deliveryFile" checked onchange="toggleDeliveryMethod(this.value)">
+                            <label class="form-check-label" for="deliveryFile">
+                                <strong>File Upload</strong>
+                                <small class="d-block text-muted">Upload file directly to server (recommended for security)</small>
+                            </label>
+                        </div>
+                        <div class="form-check mt-2">
+                            <input class="form-check-input" type="radio" name="digital_delivery_method" value="url" id="deliveryUrl" onchange="toggleDeliveryMethod(this.value)">
+                            <label class="form-check-label" for="deliveryUrl">
+                                <strong>External Link</strong>
+                                <small class="d-block text-muted">Provide URL to file hosted elsewhere</small>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <!-- File Upload Option -->
+                    <div id="fileUploadOption" class="mb-3">
+                        <label class="form-label">Digital File</label>
+                        <input type="file" name="digital_file" class="form-control" id="digitalFileInput">
+                        <small class="form-text text-muted">Upload the digital product file. Max size: <?= ini_get('upload_max_filesize'); ?></small>
+                    </div>
+                    
+                    <!-- External URL Option -->
+                    <div id="externalUrlOption" class="mb-3" style="display: none;">
+                        <label class="form-label">External File URL</label>
+                        <input type="url" name="digital_url" class="form-control" placeholder="https://example.com/your-file.zip" value="<?= h($form['digital_url'] ?? '') ?>">
+                        <small class="form-text text-muted">Direct link to your hosted file</small>
                     </div>
                     
                     <div class="mb-3">
@@ -1228,8 +1338,47 @@ document.addEventListener('DOMContentLoaded', function() {
 })();
 </script>
 
+<!-- Brand "Other" option toggle -->
+<script>
+function toggleOtherBrandField(value) {
+    const newBrandField = document.getElementById('new_brand_field');
+    if (value === 'other') {
+        newBrandField.style.display = 'block';
+        document.getElementById('new_brand_name').setAttribute('required', 'required');
+    } else {
+        newBrandField.style.display = 'none';
+        document.getElementById('new_brand_name').removeAttribute('required');
+    }
+}
+
+// Check on page load
+document.addEventListener('DOMContentLoaded', function() {
+    const brandSelect = document.getElementById('brand_id');
+    if (brandSelect && brandSelect.value === 'other') {
+        toggleOtherBrandField('other');
+    }
+});
+</script>
+
 <!-- Digital Product Toggle -->
 <script>
+function toggleDeliveryMethod(method) {
+    const fileUploadOption = document.getElementById('fileUploadOption');
+    const externalUrlOption = document.getElementById('externalUrlOption');
+    const digitalFileInput = document.getElementById('digitalFileInput');
+    const digitalUrlInput = document.querySelector('input[name="digital_url"]');
+    
+    if (method === 'file') {
+        fileUploadOption.style.display = 'block';
+        externalUrlOption.style.display = 'none';
+        digitalUrlInput.removeAttribute('required');
+    } else if (method === 'url') {
+        fileUploadOption.style.display = 'none';
+        externalUrlOption.style.display = 'block';
+        digitalFileInput.removeAttribute('required');
+    }
+}
+
 function toggleDigitalFields(isDigital) {
     const digitalFields = document.getElementById('digitalProductFields');
     const shippingSection = document.querySelector('.seller-form-card:has([name="weight"])');

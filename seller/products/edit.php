@@ -31,10 +31,14 @@ function db_columns_for_table(string $table): array{
   static $c=[]; if(isset($c[$table])) return $c[$table];
   try{ 
     // Try SQLite PRAGMA first (most common in this project)
-    $r=Database::query("PRAGMA table_info($table)")->fetchAll(PDO::FETCH_ASSOC);
-    if($r){ 
-      $cols=[]; foreach($r as $row) $cols[]=$row['name']; 
-      return $c[$table]=array_flip($cols);
+    try {
+      $r=Database::query("PRAGMA table_info($table)")->fetchAll(PDO::FETCH_ASSOC);
+      if($r){ 
+        $cols=[]; foreach($r as $row) $cols[]=$row['name']; 
+        return $c[$table]=array_flip($cols);
+      }
+    } catch(Throwable $sqliteErr) {
+      // SQLite failed, try MySQL
     }
     // Fallback to MySQL information_schema
     $r=Database::query("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?",[$table])->fetchAll(PDO::FETCH_COLUMN);
