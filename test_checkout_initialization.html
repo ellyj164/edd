@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Checkout Initialization Test</title>
+    
+    <!-- Simulate library loading order -->
+    <script>
+        // Simulate slow library loading
+        console.log('Page started loading at:', Date.now());
+    </script>
+    
+    <!-- jQuery (with delay simulation) -->
+    <script>
+        setTimeout(() => {
+            console.log('Loading jQuery at:', Date.now());
+        }, 100);
+    </script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    
+    <!-- International Telephone Input -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/intl-tel-input@18.2.1/build/css/intlTelInput.css">
+    <script src="https://cdn.jsdelivr.net/npm/intl-tel-input@18.2.1/build/js/intlTelInput.min.js"></script>
+    
+    <!-- Select2 -->
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        
+        .test-container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        h1 {
+            margin-top: 0;
+            color: #333;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .form-input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 1rem;
+            box-sizing: border-box;
+        }
+        
+        .status {
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        
+        .status.success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        
+        .status.error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        
+        .status.info {
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+        }
+        
+        .log {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            border: 1px solid #dee2e6;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 0.85rem;
+        }
+        
+        .log-entry {
+            margin-bottom: 5px;
+            padding: 2px 0;
+        }
+        
+        .log-entry.success {
+            color: #28a745;
+        }
+        
+        .log-entry.error {
+            color: #dc3545;
+        }
+        
+        .iti {
+            width: 100%;
+            display: block;
+        }
+        
+        .select2-container {
+            width: 100% !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🧪 Checkout Initialization Test</h1>
+        <p>This test verifies that the checkout selectors initialize properly with the new DOMContentLoaded and library loading checks.</p>
+        
+        <div id="status" class="status info">
+            <strong>Status:</strong> Initializing...
+        </div>
+        
+        <div class="form-group">
+            <label class="form-label" for="country">Country Selector</label>
+            <select id="country" name="country" class="form-input country-select">
+                <option value="">Select country...</option>
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <label class="form-label" for="phone">Phone Number</label>
+            <input type="tel" id="phone" name="phone" class="form-input">
+        </div>
+        
+        <div class="form-group">
+            <label class="form-label">Initialization Log</label>
+            <div id="log" class="log"></div>
+        </div>
+    </div>
+
+    <script>
+    // Test the new initialization pattern
+    function log(message, type = 'info') {
+        const logDiv = document.getElementById('log');
+        const entry = document.createElement('div');
+        entry.className = `log-entry ${type}`;
+        entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+        logDiv.appendChild(entry);
+        logDiv.scrollTop = logDiv.scrollHeight;
+        console.log(message);
+    }
+
+    function updateStatus(message, type) {
+        const statusDiv = document.getElementById('status');
+        statusDiv.className = `status ${type}`;
+        statusDiv.innerHTML = `<strong>Status:</strong> ${message}`;
+    }
+
+    log('Page script started');
+    log('Waiting for DOM to load...');
+
+    // Replicate the checkout.php initialization pattern
+    document.addEventListener('DOMContentLoaded', function() {
+        log('✓ DOMContentLoaded event fired', 'success');
+        
+        (function() {
+            'use strict';
+            
+            log('Starting initialization check...');
+            
+            // Wait for all required libraries to be loaded
+            function waitForLibraries(callback) {
+                log('Checking for required libraries...');
+                const startTime = Date.now();
+                
+                const checkInterval = setInterval(function() {
+                    const elapsed = Date.now() - startTime;
+                    
+                    if (typeof jQuery !== 'undefined' && 
+                        typeof jQuery.fn.select2 !== 'undefined' && 
+                        typeof window.intlTelInput !== 'undefined') {
+                        clearInterval(checkInterval);
+                        log(`✓ All libraries loaded after ${elapsed}ms`, 'success');
+                        callback();
+                    } else {
+                        if (elapsed % 500 < 50) {
+                            const missing = [];
+                            if (typeof jQuery === 'undefined') missing.push('jQuery');
+                            if (typeof jQuery === 'undefined' || typeof jQuery.fn.select2 === 'undefined') missing.push('Select2');
+                            if (typeof window.intlTelInput === 'undefined') missing.push('intl-tel-input');
+                            log(`Waiting... Missing: ${missing.join(', ')}`);
+                        }
+                    }
+                }, 50);
+                
+                // Timeout after 10 seconds
+                setTimeout(function() {
+                    clearInterval(checkInterval);
+                    if (typeof jQuery === 'undefined' || 
+                        typeof jQuery.fn.select2 === 'undefined' || 
+                        typeof window.intlTelInput === 'undefined') {
+                        log('✗ Timeout: Required libraries failed to load', 'error');
+                        updateStatus('Error: Libraries failed to load', 'error');
+                    }
+                }, 10000);
+            }
+            
+            // Initialize everything once libraries are loaded
+            waitForLibraries(function() {
+                log('Initializing selectors...');
+                updateStatus('Initializing selectors...', 'info');
+                
+                // Minimal country list for testing
+                const countries = [
+                    { code: 'US', name: 'United States', flag: '🇺🇸', phone: '+1', currency: 'USD' },
+                    { code: 'RW', name: 'Rwanda', flag: '🇷🇼', phone: '+250', currency: 'RWF' },
+                    { code: 'GB', name: 'United Kingdom', flag: '🇬🇧', phone: '+44', currency: 'USD' },
+                    { code: 'FR', name: 'France', flag: '🇫🇷', phone: '+33', currency: 'EUR' },
+                    { code: 'DE', name: 'Germany', flag: '🇩🇪', phone: '+49', currency: 'EUR' },
+                    { code: 'CA', name: 'Canada', flag: '🇨🇦', phone: '+1', currency: 'USD' },
+                    { code: 'AU', name: 'Australia', flag: '🇦🇺', phone: '+61', currency: 'USD' },
+                    { code: 'JP', name: 'Japan', flag: '🇯🇵', phone: '+81', currency: 'USD' }
+                ];
+                
+                // Populate country select
+                const countrySelect = document.getElementById('country');
+                if (countrySelect) {
+                    log('Populating country selector...');
+                    
+                    countries.forEach(country => {
+                        const option = document.createElement('option');
+                        option.value = country.code;
+                        option.textContent = `${country.flag} ${country.name}`;
+                        countrySelect.appendChild(option);
+                    });
+                    
+                    const optionCount = countrySelect.options.length - 1; // Subtract placeholder
+                    log(`✓ Country selector populated with ${optionCount} countries`, 'success');
+                } else {
+                    log('✗ Country selector element not found', 'error');
+                }
+                
+                // Initialize Select2
+                if (typeof jQuery !== 'undefined' && jQuery.fn.select2) {
+                    log('Initializing Select2...');
+                    jQuery('.country-select').select2({
+                        placeholder: 'Select a country',
+                        allowClear: false,
+                        width: '100%'
+                    });
+                    log('✓ Select2 initialized', 'success');
+                } else {
+                    log('✗ Select2 not available', 'error');
+                }
+                
+                // Initialize intl-tel-input
+                const phoneField = document.getElementById('phone');
+                if (phoneField && window.intlTelInput) {
+                    log('Initializing intl-tel-input...');
+                    const phoneInput = window.intlTelInput(phoneField, {
+                        initialCountry: 'us',
+                        preferredCountries: ['us', 'rw', 'ca', 'gb'],
+                        separateDialCode: true,
+                        utilsScript: 'https://cdn.jsdelivr.net/npm/intl-tel-input@18.2.1/build/js/utils.js'
+                    });
+                    log('✓ intl-tel-input initialized', 'success');
+                    
+                    // Test country change
+                    phoneField.addEventListener('countrychange', function() {
+                        const data = phoneInput.getSelectedCountryData();
+                        log(`Phone country changed to: ${data.name} (${data.iso2.toUpperCase()})`);
+                    });
+                } else {
+                    log('✗ intl-tel-input not available', 'error');
+                }
+                
+                // Final status
+                updateStatus('✓ All selectors initialized successfully!', 'success');
+                log('=== Initialization complete ===', 'success');
+            });
+        })();
+    });
+    </script>
+</body>
+</html>
