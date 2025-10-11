@@ -1,0 +1,76 @@
+/**
+ * Icon CSS - Font Awesome Alternatives
+ * Simple CSS-only icons to replace Font Awesome
+ */
+
+/* Basic icon styling */
+.icon {
+    display: inline-block;
+    width: 1em;
+    height: 1em;
+    text-align: center;
+    line-height: 1;
+}
+
+/* Font Awesome replacement classes */
+.fas, .fa {
+    font-style: normal;
+    font-weight: 900;
+    font-family: inherit;
+}
+
+/* Common icons using Unicode symbols */
+.fa-star:before { content: "★"; }
+.fa-heart:before { content: "♥"; }
+.fa-search:before { content: "🔍"; }
+.fa-shopping-cart:before { content: "🛒"; }
+.fa-user:before { content: "👤"; }
+.fa-envelope:before { content: "✉"; }
+.fa-phone:before { content: "📞"; }
+.fa-home:before { content: "🏠"; }
+.fa-eye:before { content: "👁"; }
+.fa-cog:before { content: "⚙"; }
+.fa-bars:before { content: "☰"; }
+.fa-times:before { content: "✕"; }
+.fa-chevron-down:before { content: "▼"; }
+.fa-chevron-up:before { content: "▲"; }
+.fa-chevron-left:before { content: "◀"; }
+.fa-chevron-right:before { content: "▶"; }
+.fa-plus:before { content: "+"; }
+.fa-minus:before { content: "−"; }
+.fa-check:before { content: "✓"; }
+.fa-fire:before { content: "🔥"; }
+.fa-bolt:before { content: "⚡"; }
+.fa-tag:before { content: "🏷"; }
+.fa-gift:before { content: "🎁"; }
+
+/* Category icons */
+.fa-laptop:before { content: "💻"; }
+.fa-mobile:before { content: "📱"; }
+.fa-tshirt:before { content: "👕"; }
+.fa-dumbbell:before { content: "🏋"; }
+.fa-gamepad:before { content: "🎮"; }
+.fa-camera:before { content: "📷"; }
+.fa-headphones:before { content: "🎧"; }
+.fa-book:before { content: "📚"; }
+.fa-car:before { content: "🚗"; }
+.fa-bicycle:before { content: "🚲"; }
+
+/* Arrow and navigation icons */
+.fa-arrow-left:before { content: "←"; }
+.fa-arrow-right:before { content: "→"; }
+.fa-arrow-up:before { content: "↑"; }
+.fa-arrow-down:before { content: "↓"; }
+
+/* Social media icons using text */
+.fa-facebook:before { content: "f"; background: #1877f2; color: white; border-radius: 3px; padding: 2px; }
+.fa-twitter:before { content: "𝕏"; }
+.fa-instagram:before { content: "📷"; }
+
+/* Size modifiers */
+.fa-xs { font-size: 0.75em; }
+.fa-sm { font-size: 0.875em; }
+.fa-lg { font-size: 1.33333em; }
+.fa-xl { font-size: 1.5em; }
+.fa-2x { font-size: 2em; }
+.fa-3x { font-size: 3em; }

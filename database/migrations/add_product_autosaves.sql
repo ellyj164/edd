@@ -1,0 +1,35 @@
+-- Add product_autosaves table for autosave functionality
+-- This table stores temporary drafts of products being created
+
+CREATE TABLE IF NOT EXISTS `product_autosaves` (
+    `id` int(11) NOT NULL AUTO_INCREMENT,
+    `seller_id` int(10) UNSIGNED NOT NULL,
+    `name` varchar(255) DEFAULT NULL,
+    `slug` varchar(275) DEFAULT NULL,
+    `short_description` varchar(500) DEFAULT NULL,
+    `description` text DEFAULT NULL,
+    `category_id` int(11) DEFAULT NULL,
+    `brand` varchar(160) DEFAULT NULL,
+    `price` decimal(10,2) DEFAULT NULL,
+    `compare_price` decimal(10,2) DEFAULT NULL,
+    `cost_price` decimal(10,2) DEFAULT NULL,
+    `currency_code` char(3) DEFAULT 'USD',
+    `stock_qty` int(11) DEFAULT NULL,
+    `low_stock_threshold` int(11) DEFAULT NULL,
+    `track_inventory` tinyint(1) DEFAULT 1,
+    `allow_backorder` tinyint(1) DEFAULT 0,
+    `condition` enum('new','used','refurbished') DEFAULT 'new',
+    `tags` text DEFAULT NULL,
+    `weight_kg` decimal(10,3) DEFAULT NULL,
+    `length_cm` decimal(10,2) DEFAULT NULL,
+    `width_cm` decimal(10,2) DEFAULT NULL,
+    `height_cm` decimal(10,2) DEFAULT NULL,
+    `seo_title` varchar(70) DEFAULT NULL,
+    `seo_description` varchar(170) DEFAULT NULL,
+    `seo_keywords` varchar(255) DEFAULT NULL,
+    `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_seller_id` (`seller_id`),
+    KEY `idx_updated_at` (`updated_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

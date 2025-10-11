@@ -1,0 +1,23 @@
+# Admin Panel Directory Configuration
+DirectoryIndex index.php dashboard.php
+
+# Ensure admin panel pages are served correctly
+RewriteEngine On
+
+# Prevent access to sensitive files
+<Files "*.sql">
+    Order allow,deny
+    Deny from all
+</Files>
+
+<Files "config*.php">
+    Order allow,deny
+    Deny from all
+</Files>
+
+# Security headers for admin panel
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options nosniff
+    Header always set X-Frame-Options DENY
+    Header always set X-XSS-Protection "1; mode=block"
+</IfModule>

@@ -1,0 +1,456 @@
+/**
+ * Account Management Enhanced Styles
+ * Additional CSS for account dashboard features
+ */
+
+/* Button Styles */
+.btn-primary {
+    background: var(--account-primary, #2563eb);
+    color: white;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: 8px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-primary:hover {
+    background: #1d4ed8;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.btn-outline {
+    background: white;
+    color: var(--account-primary, #2563eb);
+    border: 2px solid var(--account-primary, #2563eb);
+    padding: 0.75rem 1.5rem;
+    border-radius: 8px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-outline:hover {
+    background: var(--account-primary, #2563eb);
+    color: white;
+}
+
+.btn-danger {
+    background: var(--account-danger, #dc2626);
+    color: white;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: 8px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-danger:hover {
+    background: #b91c1c;
+}
+
+.btn-sm {
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+}
+
+/* Address Card Styles */
+.addresses-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1.5rem;
+    padding: 1.5rem;
+}
+
+.address-card {
+    background: white;
+    border: 2px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 1.5rem;
+    position: relative;
+    transition: all 0.2s ease;
+}
+
+.address-card:hover {
+    border-color: var(--account-primary, #2563eb);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.address-card.default-address {
+    border-color: var(--account-success, #059669);
+    background: #f0fdf4;
+}
+
+.default-badge {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    background: var(--account-success, #059669);
+    color: white;
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.address-type {
+    font-size: 0.875rem;
+    color: #6b7280;
+    font-weight: 500;
+    margin-bottom: 0.75rem;
+}
+
+.address-details {
+    margin-bottom: 1rem;
+}
+
+.address-name {
+    font-weight: 600;
+    font-size: 1.1rem;
+    margin-bottom: 0.5rem;
+}
+
+.address-line,
+.address-location,
+.address-phone {
+    color: #4b5563;
+    margin-bottom: 0.25rem;
+}
+
+.address-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+/* Payment Card Styles */
+.payment-methods {
+    padding: 1.5rem;
+    display: grid;
+    gap: 1rem;
+}
+
+.payment-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem;
+    border: 2px solid #e5e7eb;
+    border-radius: 12px;
+    transition: all 0.2s ease;
+}
+
+.payment-card:hover {
+    border-color: var(--account-primary, #2563eb);
+}
+
+.payment-type {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.card-icon {
+    font-size: 2rem;
+}
+
+.payment-details {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.payment-brand {
+    font-weight: 600;
+    font-size: 1rem;
+}
+
+.payment-number {
+    color: #6b7280;
+    font-family: 'Courier New', monospace;
+}
+
+.payment-expiry {
+    color: #6b7280;
+    font-size: 0.875rem;
+}
+
+.payment-status {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.payment-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+/* Order Item Styles */
+.order-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem;
+    border-bottom: 1px solid #e5e7eb;
+    transition: background 0.2s ease;
+}
+
+.order-item:hover {
+    background: #f9fafb;
+}
+
+.order-item:last-child {
+    border-bottom: none;
+}
+
+.order-item.detailed {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1rem;
+}
+
+.order-number {
+    font-weight: 600;
+    font-size: 1.1rem;
+}
+
+.order-date {
+    color: #6b7280;
+    font-size: 0.875rem;
+}
+
+.order-status {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.order-status.status-pending {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.order-status.status-processing {
+    background: #dbeafe;
+    color: #1e40af;
+}
+
+.order-status.status-shipped {
+    background: #e0e7ff;
+    color: #3730a3;
+}
+
+.order-status.status-delivered,
+.order-status.status-completed {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.order-status.status-cancelled {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.order-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+/* Wallet Card Styles */
+.wallet-card {
+    background: linear-gradient(135deg, var(--account-primary, #2563eb), #3b82f6);
+    color: white;
+    border: none;
+}
+
+.wallet-balance {
+    font-size: 2.5rem;
+    font-weight: 700;
+    margin: 1rem 0;
+}
+
+.wallet-btn {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.wallet-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+    border-color: rgba(255, 255, 255, 0.5);
+}
+
+.wallet-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+/* Empty State */
+.empty-state {
+    text-align: center;
+    padding: 4rem 2rem;
+}
+
+.empty-icon {
+    font-size: 4rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+}
+
+.empty-state h3 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: #111827;
+}
+
+.empty-state p {
+    color: #6b7280;
+    margin-bottom: 1.5rem;
+}
+
+/* Security Options */
+.security-options {
+    display: grid;
+    gap: 1rem;
+    padding: 1.5rem;
+}
+
+.security-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem;
+    border: 2px solid #e5e7eb;
+    border-radius: 12px;
+}
+
+.security-info h4 {
+    margin: 0 0 0.25rem;
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.security-info p {
+    margin: 0;
+    color: #6b7280;
+    font-size: 0.875rem;
+}
+
+.security-action {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.badge {
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.badge-enabled {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.badge-disabled {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+/* Preferences Form */
+.preferences-form {
+    padding: 1.5rem;
+}
+
+.preference-section {
+    margin-bottom: 2rem;
+}
+
+.preference-section h4 {
+    margin-bottom: 1rem;
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.preference-options {
+    display: grid;
+    gap: 1rem;
+}
+
+.preference-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 1rem;
+    border: 2px solid #e5e7eb;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.preference-option:hover {
+    border-color: var(--account-primary, #2563eb);
+    background: #f9fafb;
+}
+
+.preference-option input[type="checkbox"] {
+    margin-top: 0.25rem;
+}
+
+.option-info strong {
+    display: block;
+    margin-bottom: 0.25rem;
+}
+
+.option-info p {
+    margin: 0;
+    color: #6b7280;
+    font-size: 0.875rem;
+}
+
+.form-actions {
+    display: flex;
+    justify-content: flex-end;
+    padding: 1.5rem;
+    border-top: 1px solid #e5e7eb;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .addresses-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .order-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+    
+    .security-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+    
+    .wallet-balance {
+        font-size: 2rem;
+    }
+}

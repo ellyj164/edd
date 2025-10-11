@@ -1,0 +1,10 @@
+<?php
+/**
+ * Payout Management Module
+ * Redirects to Finance Module for Vendor Payouts
+ */
+
+// Redirect to finance module which handles payouts
+header('Location: /admin/finance/');
+exit;
+?>

@@ -1,0 +1,140 @@
+<?php
+/**
+ * Email Verification Template
+ * Usage: Load with file_get_contents and replace placeholders
+ * Placeholders: {{USERNAME}}, {{CODE}}, {{VERIFICATION_URL}}, {{APP_NAME}}, {{APP_URL}}, {{IP_ADDRESS}}, {{YEAR}}, {{SUPPORT_EMAIL}}
+ */
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Email Verification - {{APP_NAME}}</title>
+    <style>
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            line-height: 1.6; 
+            color: #333; 
+            background-color: #f4f4f4; 
+            margin: 0; 
+            padding: 0; 
+        }
+        .container { 
+            max-width: 600px; 
+            margin: 0 auto; 
+            background: white; 
+            border-radius: 10px; 
+            overflow: hidden; 
+            box-shadow: 0 0 20px rgba(0,0,0,0.1); 
+        }
+        .header { 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+            color: white; 
+            padding: 40px 30px; 
+            text-align: center; 
+        }
+        .header h1 { 
+            margin: 0; 
+            font-size: 28px; 
+            font-weight: 300; 
+        }
+        .content { 
+            padding: 40px 30px; 
+        }
+        .content h2 {
+            color: #333;
+            margin-top: 0;
+        }
+        .verification-code { 
+            background: #f8f9fa; 
+            border: 2px dashed #dee2e6; 
+            border-radius: 8px; 
+            padding: 30px; 
+            text-align: center; 
+            margin: 30px 0; 
+        }
+        .code { 
+            font-size: 36px; 
+            font-weight: bold; 
+            letter-spacing: 8px; 
+            color: #495057; 
+            font-family: 'Courier New', monospace; 
+        }
+        .button { 
+            display: inline-block; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+            color: white !important; 
+            padding: 15px 30px; 
+            text-decoration: none; 
+            border-radius: 5px; 
+            font-weight: bold; 
+            margin: 20px 0; 
+        }
+        .footer { 
+            background: #f8f9fa; 
+            padding: 30px; 
+            text-align: center; 
+            color: #6c757d; 
+            font-size: 14px; 
+        }
+        .footer a { 
+            color: #667eea; 
+            text-decoration: none; 
+        }
+        ul {
+            padding-left: 20px;
+        }
+        ul li {
+            margin-bottom: 8px;
+        }
+        @media (max-width: 600px) {
+            .container { margin: 0; border-radius: 0; }
+            .header, .content, .footer { padding: 20px; }
+            .code { font-size: 28px; letter-spacing: 4px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🛡️ Email Verification</h1>
+            <p>Welcome to {{APP_NAME}}!</p>
+        </div>
+        
+        <div class="content">
+            <h2>Hello {{USERNAME}}!</h2>
+            
+            <p>Thank you for creating your account with {{APP_NAME}}. To complete your registration and secure your account, please verify your email address using the 6-digit verification code below:</p>
+            
+            <div class="verification-code">
+                <p><strong>Your 6-digit verification code is:</strong></p>
+                <div class="code">{{CODE}}</div>
+                <p><small>This code is valid for 15 minutes</small></p>
+            </div>
+            
+            <p>Alternatively, you can click the button below to verify your email:</p>
+            
+            <div style="text-align: center;">
+                <a href="{{VERIFICATION_URL}}" class="button">Verify Email Address</a>
+            </div>
+            
+            <p><strong>Important Security Information:</strong></p>
+            <ul>
+                <li>This verification code was requested from {{IP_ADDRESS}}</li>
+                <li>If you didn't create this account, please ignore this email</li>
+                <li>Never share your verification code with anyone</li>
+                <li>This code expires in 15 minutes for your security</li>
+            </ul>
+            
+            <p>Need help? Contact our support team at <a href="mailto:{{SUPPORT_EMAIL}}" style="color: #667eea; text-decoration: none;">{{SUPPORT_EMAIL}}</a></p>
+        </div>
+        
+        <div class="footer">
+            <p>This email was sent from {{APP_NAME}}</p>
+            <p><a href="{{APP_URL}}" style="color: #667eea; text-decoration: none;">Visit our website</a> | <a href="{{APP_URL}}/privacy.php" style="color: #667eea; text-decoration: none;">Privacy Policy</a> | <a href="{{APP_URL}}/contact.php" style="color: #667eea; text-decoration: none;">Contact Support</a></p>
+            <p>&copy; {{YEAR}} {{APP_NAME}}. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>

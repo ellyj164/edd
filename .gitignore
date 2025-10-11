@@ -1,0 +1,26 @@
+# PHP
+vendor/
+.env
+*.log
+storage/
+node_modules/
+.DS_Store
+nul
+
+# Test files and documentation for this PR
+test_stripe_mode_explicit.php
+test_stripe_mode_simple.php
+demo_stripe_mode.sh
+STRIPE_MODE_FIX_SUMMARY.md
+BEFORE_AFTER_COMPARISON.md
+
+# Uploaded files (keep directory structure but not the files)  
+uploads/*
+!uploads/.gitkeep
+!uploads/*/.htaccess
+!uploads/*/README.md
+!uploads/digital_products/
+uploads/digital_products/*
+!uploads/digital_products/.htaccess
+!uploads/digital_products/README.md
+*.backup

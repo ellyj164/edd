@@ -1,0 +1,67 @@
+# .htaccess for Clean URLs and Routing
+RewriteEngine On
+
+# Disable MultiViews to prevent ambiguity
+Options -MultiViews
+
+# Admin panel routing - improved to prevent loops and handle existing files
+# Check that requested file doesn't already exist
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^admin/?$ admin/index.php [L]
+
+# Admin page routing - only if file doesn't exist and doesn't end in .php
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{REQUEST_URI} !\.php$
+RewriteRule ^admin/([^/]+)/?$ admin/$1.php [L]
+
+# Redirect /vendor/register to /seller/register (fix broken route)
+RewriteRule ^vendor/register\.php$ /seller/register [R=301,L]
+RewriteRule ^vendor/register$ /seller/register [R=301,L]
+
+# Pretty URLs for seller routes
+RewriteRule ^seller/register/?$ seller-register.php [L]
+RewriteRule ^seller/onboarding/?$ seller-onboarding.php [L]
+
+# Pretty URLs for account routes  
+RewriteRule ^account/orders/?$ account-orders.php [L]
+RewriteRule ^account/security/?$ account-security.php [L]
+RewriteRule ^account/addresses/?$ account-addresses.php [L]
+RewriteRule ^account/payments/?$ account-payments.php [L]
+
+# Product routes - match /product/{id} or /product/{slug}
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^product/([^/]+)/?$ product.php?id=$1 [L,QSA]
+
+# 404 handler
+ErrorDocument 404 /404.php
+
+# Security headers
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options nosniff
+    Header always set X-Frame-Options DENY
+    Header always set X-XSS-Protection "1; mode=block"
+    Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
+    
+    # Content Security Policy - Allow Stripe and CDN resources for checkout
+    # Stripe.js, intl-tel-input, and country data
+    Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: https: https://cdn.jsdelivr.net; frame-src https://js.stripe.com https://hooks.stripe.com; connect-src 'self' https://api.stripe.com https://cdn.jsdelivr.net;"
+</IfModule>
+
+# Prevent access to sensitive files
+<Files "*.log">
+    Order allow,deny
+    Deny from all
+</Files>
+
+<Files "config.php">
+    Order allow,deny
+    Deny from all
+</Files>
+
+<FilesMatch "\.(sql|db)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>

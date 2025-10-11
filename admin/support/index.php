@@ -1,0 +1,745 @@
+<?php
+/**
+ * Customer Support Module
+ * E-Commerce Platform - Admin Panel
+ * 
+ * Features:
+ * - Support ticket management
+ * - Live chat integration
+ * - Canned responses library
+ * - Customer communication tracking
+ */
+
+// Global admin page requirements
+require_once __DIR__ . '/../../includes/auth.php';
+require_once __DIR__ . '/../../includes/db.php';
+require_once __DIR__ . '/../../includes/csrf.php';
+require_once __DIR__ . '/../../includes/rbac.php';
+require_once __DIR__ . '/../../includes/mailer.php';
+require_once __DIR__ . '/../../includes/audit_log.php';
+
+// Initialize with graceful fallback
+require_once __DIR__ . '/../../includes/init.php';
+
+// Database graceful fallback
+$database_available = false;
+$pdo = null;
+try {
+    $pdo = db();
+    $pdo->query('SELECT 1');
+    $database_available = true;
+} catch (Exception $e) {
+    $database_available = false;
+    error_log("Database connection failed: " . $e->getMessage());
+}
+
+requireAdminAuth();
+checkPermission('support.view');
+    require_once __DIR__ . '/../../includes/init.php';
+    // Initialize PDO global variable for this module
+    $pdo = db();
+    requireAdminAuth();
+    checkPermission('support.view');
+
+// Handle actions
+$action = $_GET['action'] ?? 'list';
+$ticket_id = $_GET['id'] ?? '';
+$message = '';
+$error = '';
+
+// Process form submissions
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
+        $error = 'Invalid security token.';
+    } else {
+        try {
+            switch ($action) {
+                case 'reply':
+                    checkPermission('support.manage');
+                    $ticket_id = (int)$_POST['ticket_id'];
+                    $message_body = sanitizeInput($_POST['message']);
+                    $status = sanitizeInput($_POST['status']);
+                    
+                    $pdo->beginTransaction();
+                    
+                    // Add reply message
+                    $stmt = $pdo->prepare("
+                        INSERT INTO support_messages 
+                        (ticket_id, sender_id, message, is_internal, created_at)
+                        VALUES (?, ?, ?, 0, NOW())
+                    ");
+                    $stmt->execute([$ticket_id, $_SESSION['admin_id'], $message_body]);
+                    
+                    // Update ticket status and assignment
+                    $stmt = $pdo->prepare("
+                        UPDATE support_tickets 
+                        SET status = ?, assigned_to = ?, last_reply_at = NOW()
+                        WHERE id = ?
+                    ");
+                    $stmt->execute([$status, $_SESSION['admin_id'], $ticket_id]);
+                    
+                    $pdo->commit();
+                    
+                    logAuditEvent('support_ticket', $ticket_id, 'reply', [
+                        'status' => $status,
+                        'message_length' => strlen($message_body)
+                    ]);
+                    
+                    $message = 'Reply sent successfully.';
+                    break;
+                    
+                case 'assign':
+                    checkPermission('support.manage');
+                    $ticket_id = (int)$_POST['ticket_id'];
+                    $assigned_to = (int)$_POST['assigned_to'];
+                    
+                    $stmt = $pdo->prepare("
+                        UPDATE support_tickets 
+                        SET assigned_to = ?, status = 'assigned'
+                        WHERE id = ?
+                    ");
+                    $stmt->execute([$assigned_to, $ticket_id]);
+                    
+                    logAuditEvent('support_ticket', $ticket_id, 'assign', [
+                        'assigned_to' => $assigned_to
+                    ]);
+                    
+                    $message = 'Ticket assigned successfully.';
+                    break;
+                    
+                case 'add_canned_response':
+                    checkPermission('support.manage');
+                    $title = sanitizeInput($_POST['title']);
+                    $content = sanitizeInput($_POST['content']);
+                    $category = sanitizeInput($_POST['category']);
+                    
+                    $stmt = $pdo->prepare("
+                        INSERT INTO canned_responses 
+                        (title, content, category, created_by, created_at)
+                        VALUES (?, ?, ?, ?, NOW())
+                    ");
+                    $stmt->execute([$title, $content, $category, $_SESSION['admin_id']]);
+                    
+                    logAuditEvent('canned_response', $pdo->lastInsertId(), 'create', [
+                        'title' => $title,
+                        'category' => $category
+                    ]);
+                    
+                    $message = 'Canned response added successfully.';
+                    break;
+                    
+                case 'update_status':
+                    checkPermission('support.manage');
+                    $ticket_id = (int)$_POST['ticket_id'];
+                    $status = sanitizeInput($_POST['status']);
+                    $notes = sanitizeInput($_POST['notes']);
+                    
+                    $stmt = $pdo->prepare("
+                        UPDATE support_tickets 
+                        SET status = ?, admin_notes = ?
+                        WHERE id = ?
+                    ");
+                    $stmt->execute([$status, $notes, $ticket_id]);
+                    
+                    if ($notes) {
+                        // Add internal note
+                        $stmt = $pdo->prepare("
+                            INSERT INTO support_messages 
+                            (ticket_id, sender_id, message, is_internal, created_at)
+                            VALUES (?, ?, ?, 1, NOW())
+                        ");
+                        $stmt->execute([$ticket_id, $_SESSION['admin_id'], $notes]);
+                    }
+                    
+                    logAuditEvent('support_ticket', $ticket_id, 'status_update', [
+                        'new_status' => $status
+                    ]);
+                    
+                    $message = 'Ticket status updated successfully.';
+                    break;
+            }
+        } catch (Exception $e) {
+            if (isset($pdo) && $pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            $error = $e->getMessage();
+        }
+    }
+}
+
+// Get data for display
+$tickets = [];
+$support_stats = [];
+$canned_responses = [];
+$agents = [];
+
+// Initialize with graceful fallback
+require_once __DIR__ . '/../../includes/init.php';
+
+// Database graceful fallback
+$database_available = false;
+$pdo = null;
+try {
+    $pdo = db();
+    $pdo->query('SELECT 1');
+    $database_available = true;
+} catch (Exception $e) {
+    $database_available = false;
+    error_log("Database connection failed: " . $e->getMessage());
+}
+
+requireAdminAuth();
+checkPermission('support.view');
+    // Get support tickets with customer and agent info
+    $filters = [
+        'status' => $_GET['status'] ?? '',
+        'priority' => $_GET['priority'] ?? '',
+        'assigned_to' => $_GET['assigned_to'] ?? ''
+    ];
+    
+    $where_conditions = [];
+    $params = [];
+    
+    if (!empty($filters['status'])) {
+        $where_conditions[] = "t.status = ?";
+        $params[] = $filters['status'];
+    }
+    
+    if (!empty($filters['priority'])) {
+        $where_conditions[] = "t.priority = ?";
+        $params[] = $filters['priority'];
+    }
+    
+    if (!empty($filters['assigned_to'])) {
+        $where_conditions[] = "t.assigned_to = ?";
+        $params[] = $filters['assigned_to'];
+    }
+    
+    $where_clause = empty($where_conditions) ? '' : 'WHERE ' . implode(' AND ', $where_conditions);
+    
+    $stmt = $pdo->prepare("
+        SELECT t.*, 
+               (u.first_name || ' ' || u.last_name) as customer_name, u.email as customer_email,
+               (agent.first_name || ' ' || agent.last_name) as agent_name,
+               COUNT(m.id) as message_count,
+               MAX(m.created_at) as last_message_at
+        FROM support_tickets t
+        LEFT JOIN users u ON t.user_id = u.id
+        LEFT JOIN users agent ON t.assigned_to = agent.id
+        LEFT JOIN support_messages m ON t.id = m.ticket_id
+        {$where_clause}
+        GROUP BY t.id
+        ORDER BY t.priority DESC, t.created_at DESC
+        LIMIT 50
+    ");
+    $stmt->execute($params);
+    $tickets = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    // Get support statistics
+    $stmt = $pdo->query("
+        SELECT 
+            COUNT(*) as total_tickets,
+            COUNT(CASE WHEN status = 'open' THEN 1 END) as open_tickets,
+            COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending_tickets,
+            COUNT(CASE WHEN status = 'resolved' THEN 1 END) as resolved_tickets,
+            COUNT(CASE WHEN priority = 'high' THEN 1 END) as high_priority,
+            AVG(CASE WHEN status = 'resolved' THEN 
+                TIMESTAMPDIFF(HOUR, created_at, resolved_at) 
+            END) as avg_resolution_hours
+        FROM support_tickets
+        WHERE date(created_at) >= date('now', '-30 days')
+    ");
+    $support_stats = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+    // Get canned responses
+    $stmt = $pdo->query("
+        SELECT cr.*, (u.first_name || ' ' || u.last_name) as created_by_name
+        FROM canned_responses cr
+        LEFT JOIN users u ON cr.created_by = u.id
+        ORDER BY cr.category, cr.title
+    ");
+    $canned_responses = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    // Get support agents
+    $stmt = $pdo->query("
+        SELECT u.id, (u.first_name || ' ' || u.last_name) as name
+        FROM users u
+        JOIN user_role_assignments ura ON u.id = ura.user_id
+        JOIN roles r ON ura.role_id = r.id
+        WHERE u.role IN ('admin', 'support')
+        ORDER BY u.name
+    ");
+    $agents = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+
+// Get selected ticket details if viewing
+$selected_ticket = null;
+$ticket_messages = [];
+if ($action === 'view' && $ticket_id) {
+    try {
+        $stmt = $pdo->prepare("
+            SELECT t.*, 
+                   u.name as customer_name, u.email as customer_email,
+                   (agent.first_name || ' ' || agent.last_name) as agent_name
+            FROM support_tickets t
+            LEFT JOIN users u ON t.user_id = u.id
+            LEFT JOIN users agent ON t.assigned_to = agent.id
+            WHERE t.id = ?
+        ");
+        $stmt->execute([$ticket_id]);
+        $selected_ticket = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if ($selected_ticket) {
+            // Get ticket messages
+            $stmt = $pdo->prepare("
+                SELECT m.*, u.name as sender_name, u.role
+                FROM support_messages m
+                LEFT JOIN users u ON m.sender_id = u.id
+                WHERE m.ticket_id = ?
+                ORDER BY m.created_at ASC
+            ");
+            $stmt->execute([$ticket_id]);
+            $ticket_messages = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        }
+    } catch (Exception $e) {
+        $error = 'Error loading ticket details: ' . $e->getMessage();
+    }
+}
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Customer Support - Admin Panel</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .sidebar { min-height: 100vh; background-color: #2c3e50; }
+        .sidebar a { color: #bdc3c7; text-decoration: none; }
+        .sidebar a:hover { color: #fff; background-color: #34495e; }
+        .message-bubble {
+            padding: 10px 15px;
+            margin: 5px 0;
+            border-radius: 10px;
+            max-width: 80%;
+        }
+        .message-customer {
+            background-color: #e3f2fd;
+            margin-left: auto;
+        }
+        .message-agent {
+            background-color: #f3e5f5;
+        }
+        .message-internal {
+            background-color: #fff3e0;
+            border: 1px solid #ffcc02;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Sidebar -->
+            <div class="col-md-2 sidebar p-3">
+                <h4 class="text-white mb-4">Admin Panel</h4>
+                <ul class="nav flex-column">
+                    <li class="nav-item">
+                        <a class="nav-link" href="../index.php">
+                            <i class="fas fa-tachometer-alt"></i> Dashboard
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="index.php">
+                            <i class="fas fa-headset"></i> Support
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="../communications/index.php">
+                            <i class="fas fa-comments"></i> Communications
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="../users/index.php">
+                            <i class="fas fa-users"></i> Users
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+            <!-- Main Content -->
+            <div class="col-md-10 p-4">
+                <?php if ($action === 'view' && $selected_ticket): ?>
+                <!-- Ticket Details View -->
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h2><i class="fas fa-headset text-primary"></i> Ticket #<?= $selected_ticket['id'] ?></h2>
+                    <div class="btn-group">
+                        <a href="index.php" class="btn btn-secondary">
+                            <i class="fas fa-arrow-left"></i> Back to List
+                        </a>
+                        <?php if (hasPermission('support.manage')): ?>
+                        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#replyModal">
+                            <i class="fas fa-reply"></i> Reply
+                        </button>
+                        <button type="button" class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#statusModal">
+                            <i class="fas fa-edit"></i> Update Status
+                        </button>
+                        <?php endif; ?>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-8">
+                        <!-- Ticket Info -->
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h5 class="mb-0"><?= htmlspecialchars($selected_ticket['subject']) ?></h5>
+                            </div>
+                            <div class="card-body">
+                                <dl class="row">
+                                    <dt class="col-sm-3">Customer:</dt>
+                                    <dd class="col-sm-9">
+                                        <?= htmlspecialchars($selected_ticket['customer_name']) ?><br>
+                                        <small class="text-muted"><?= htmlspecialchars($selected_ticket['customer_email']) ?></small>
+                                    </dd>
+                                    
+                                    <dt class="col-sm-3">Category:</dt>
+                                    <dd class="col-sm-9"><?= ucfirst($selected_ticket['category']) ?></dd>
+                                    
+                                    <dt class="col-sm-3">Priority:</dt>
+                                    <dd class="col-sm-9">
+                                        <?php
+                                        $priority_colors = ['low' => 'success', 'medium' => 'warning', 'high' => 'danger'];
+                                        $color = $priority_colors[$selected_ticket['priority']] ?? 'secondary';
+                                        ?>
+                                        <span class="badge bg-<?= $color ?>"><?= ucfirst($selected_ticket['priority']) ?></span>
+                                    </dd>
+                                    
+                                    <dt class="col-sm-3">Status:</dt>
+                                    <dd class="col-sm-9">
+                                        <?php
+                                        $status_colors = ['open' => 'warning', 'pending' => 'info', 'resolved' => 'success', 'closed' => 'secondary'];
+                                        $color = $status_colors[$selected_ticket['status']] ?? 'secondary';
+                                        ?>
+                                        <span class="badge bg-<?= $color ?>"><?= ucfirst($selected_ticket['status']) ?></span>
+                                    </dd>
+                                    
+                                    <dt class="col-sm-3">Assigned to:</dt>
+                                    <dd class="col-sm-9"><?= htmlspecialchars($selected_ticket['agent_name'] ?? 'Unassigned') ?></dd>
+                                    
+                                    <dt class="col-sm-3">Created:</dt>
+                                    <dd class="col-sm-9"><?= date('M j, Y g:i A', strtotime($selected_ticket['created_at'])) ?></dd>
+                                </dl>
+                            </div>
+                        </div>
+
+                        <!-- Messages -->
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0">Conversation</h5>
+                            </div>
+                            <div class="card-body" style="max-height: 600px; overflow-y: auto;">
+                                <?php foreach ($ticket_messages as $msg): ?>
+                                <div class="message-bubble <?= $msg['is_internal'] ? 'message-internal' : ($msg['role'] === 'customer' ? 'message-customer' : 'message-agent') ?>">
+                                    <div class="d-flex justify-content-between align-items-start">
+                                        <strong><?= htmlspecialchars($msg['sender_name']) ?></strong>
+                                        <small class="text-muted"><?= date('M j, g:i A', strtotime($msg['created_at'])) ?></small>
+                                    </div>
+                                    <div class="mt-2"><?= nl2br(htmlspecialchars($msg['message'])) ?></div>
+                                    <?php if ($msg['is_internal']): ?>
+                                    <small class="text-warning"><i class="fas fa-lock"></i> Internal Note</small>
+                                    <?php endif; ?>
+                                </div>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-4">
+                        <!-- Quick Actions -->
+                        <?php if (hasPermission('support.manage')): ?>
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h5 class="mb-0">Quick Actions</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="d-grid gap-2">
+                                    <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#assignModal">
+                                        <i class="fas fa-user-plus"></i> Assign Agent
+                                    </button>
+                                    <button class="btn btn-outline-success" onclick="updateTicketStatus('resolved')">
+                                        <i class="fas fa-check"></i> Mark Resolved
+                                    </button>
+                                    <button class="btn btn-outline-secondary" onclick="updateTicketStatus('closed')">
+                                        <i class="fas fa-times"></i> Close Ticket
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <?php endif; ?>
+
+                        <!-- Canned Responses -->
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0">Canned Responses</h5>
+                            </div>
+                            <div class="card-body">
+                                <?php 
+                                $categories = array_unique(array_column($canned_responses, 'category'));
+                                foreach ($categories as $category): 
+                                    $category_responses = array_filter($canned_responses, fn($r) => $r['category'] === $category);
+                                ?>
+                                <h6><?= ucfirst($category) ?></h6>
+                                <?php foreach ($category_responses as $response): ?>
+                                <button class="btn btn-sm btn-outline-secondary mb-1" 
+                                        onclick="insertCannedResponse('<?= htmlspecialchars($response['content']) ?>')">
+                                    <?= htmlspecialchars($response['title']) ?>
+                                </button>
+                                <?php endforeach; ?>
+                                <hr>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <?php else: ?>
+                <!-- Tickets List View -->
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h2><i class="fas fa-headset text-primary"></i> Customer Support</h2>
+                    <div class="btn-group">
+                        <?php if (hasPermission('support.manage')): ?>
+                        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#cannedModal">
+                            <i class="fas fa-plus"></i> Add Canned Response
+                        </button>
+                        <?php endif; ?>
+                        <button type="button" class="btn btn-success" onclick="exportTickets()">
+                            <i class="fas fa-download"></i> Export
+                        </button>
+                    </div>
+                </div>
+
+                <?php if ($message): ?>
+                    <div class="alert alert-success alert-dismissible fade show">
+                        <?= htmlspecialchars($message) ?>
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                <?php endif; ?>
+
+                <?php if ($error): ?>
+                    <div class="alert alert-danger alert-dismissible fade show">
+                        <?= htmlspecialchars($error) ?>
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                <?php endif; ?>
+
+                <!-- Support Statistics -->
+                <div class="row mb-4">
+                    <div class="col-md-3">
+                        <div class="card bg-warning text-white">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <h4><?= number_format($support_stats['open_tickets']) ?></h4>
+                                        <p class="mb-0">Open Tickets</p>
+                                    </div>
+                                    <div class="align-self-center">
+                                        <i class="fas fa-exclamation-triangle fa-2x"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-info text-white">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <h4><?= number_format($support_stats['pending_tickets']) ?></h4>
+                                        <p class="mb-0">Pending Response</p>
+                                    </div>
+                                    <div class="align-self-center">
+                                        <i class="fas fa-clock fa-2x"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-success text-white">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <h4><?= number_format($support_stats['resolved_tickets']) ?></h4>
+                                        <p class="mb-0">Resolved (30d)</p>
+                                    </div>
+                                    <div class="align-self-center">
+                                        <i class="fas fa-check-circle fa-2x"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-primary text-white">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <h4><?= number_format($support_stats['avg_resolution_hours'], 1) ?>h</h4>
+                                        <p class="mb-0">Avg Resolution</p>
+                                    </div>
+                                    <div class="align-self-center">
+                                        <i class="fas fa-chart-line fa-2x"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Filters -->
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <form method="GET" class="row g-3">
+                            <div class="col-md-3">
+                                <label class="form-label">Status</label>
+                                <select name="status" class="form-select">
+                                    <option value="">All Statuses</option>
+                                    <option value="open" <?= $filters['status'] === 'open' ? 'selected' : '' ?>>Open</option>
+                                    <option value="pending" <?= $filters['status'] === 'pending' ? 'selected' : '' ?>>Pending</option>
+                                    <option value="resolved" <?= $filters['status'] === 'resolved' ? 'selected' : '' ?>>Resolved</option>
+                                    <option value="closed" <?= $filters['status'] === 'closed' ? 'selected' : '' ?>>Closed</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Priority</label>
+                                <select name="priority" class="form-select">
+                                    <option value="">All Priorities</option>
+                                    <option value="low" <?= $filters['priority'] === 'low' ? 'selected' : '' ?>>Low</option>
+                                    <option value="medium" <?= $filters['priority'] === 'medium' ? 'selected' : '' ?>>Medium</option>
+                                    <option value="high" <?= $filters['priority'] === 'high' ? 'selected' : '' ?>>High</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Assigned Agent</label>
+                                <select name="assigned_to" class="form-select">
+                                    <option value="">All Agents</option>
+                                    <?php foreach ($agents as $agent): ?>
+                                    <option value="<?= $agent['id'] ?>" <?= $filters['assigned_to'] == $agent['id'] ? 'selected' : '' ?>>
+                                        <?= htmlspecialchars($agent['name']) ?>
+                                    </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">&nbsp;</label>
+                                <div class="d-grid gap-2 d-md-block">
+                                    <button type="submit" class="btn btn-primary">Filter</button>
+                                    <a href="index.php" class="btn btn-secondary">Clear</a>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Tickets Table -->
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">Support Tickets</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Ticket ID</th>
+                                        <th>Subject</th>
+                                        <th>Customer</th>
+                                        <th>Category</th>
+                                        <th>Priority</th>
+                                        <th>Status</th>
+                                        <th>Assigned</th>
+                                        <th>Last Update</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($tickets as $ticket): ?>
+                                    <tr>
+                                        <td>#<?= $ticket['id'] ?></td>
+                                        <td>
+                                            <a href="?action=view&id=<?= $ticket['id'] ?>">
+                                                <?= htmlspecialchars($ticket['subject']) ?>
+                                            </a>
+                                            <br><small class="text-muted"><?= $ticket['message_count'] ?> messages</small>
+                                        </td>
+                                        <td>
+                                            <?= htmlspecialchars($ticket['customer_name']) ?><br>
+                                            <small class="text-muted"><?= htmlspecialchars($ticket['customer_email']) ?></small>
+                                        </td>
+                                        <td><?= ucfirst($ticket['category']) ?></td>
+                                        <td>
+                                            <?php
+                                            $priority_colors = ['low' => 'success', 'medium' => 'warning', 'high' => 'danger'];
+                                            $color = $priority_colors[$ticket['priority']] ?? 'secondary';
+                                            ?>
+                                            <span class="badge bg-<?= $color ?>"><?= ucfirst($ticket['priority']) ?></span>
+                                        </td>
+                                        <td>
+                                            <?php
+                                            $status_colors = ['open' => 'warning', 'pending' => 'info', 'resolved' => 'success', 'closed' => 'secondary'];
+                                            $color = $status_colors[$ticket['status']] ?? 'secondary';
+                                            ?>
+                                            <span class="badge bg-<?= $color ?>"><?= ucfirst($ticket['status']) ?></span>
+                                        </td>
+                                        <td><?= htmlspecialchars($ticket['agent_name'] ?? 'Unassigned') ?></td>
+                                        <td><?= $ticket['last_message_at'] ? date('M j, g:i A', strtotime($ticket['last_message_at'])) : date('M j, g:i A', strtotime($ticket['created_at'])) ?></td>
+                                        <td>
+                                            <a href="?action=view&id=<?= $ticket['id'] ?>" class="btn btn-sm btn-outline-primary">
+                                                <i class="fas fa-eye"></i>
+                                            </a>
+                                            <?php if (hasPermission('support.manage')): ?>
+                                            <button class="btn btn-sm btn-outline-success" onclick="quickAssign(<?= $ticket['id'] ?>)">
+                                                <i class="fas fa-user-plus"></i>
+                                            </button>
+                                            <?php endif; ?>
+                                        </td>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+
+    <!-- Various modals here -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function quickAssign(ticketId) {
+            // Implementation for quick assignment
+            alert('Quick assign functionality to be implemented');
+        }
+        
+        function updateTicketStatus(status) {
+            // Implementation for status update
+            alert('Status update functionality to be implemented');
+        }
+        
+        function insertCannedResponse(content) {
+            // Insert canned response into reply textarea
+            const textarea = document.querySelector('textarea[name="message"]');
+            if (textarea) {
+                textarea.value = content;
+            }
+        }
+        
+        function exportTickets() {
+            window.location.href = '?export=1';
+        }
+    </script>
+</body>
+</html>

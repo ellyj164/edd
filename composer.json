@@ -1,0 +1,7 @@
+{
+    "name": "fezamarket/ecommerce",
+    "description": "E-Commerce Platform",
+    "require": {
+        "stripe/stripe-php": "^18.0"
+    }
+}

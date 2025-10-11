@@ -1,0 +1,749 @@
+<?php
+/**
+ * Payment Tracking Module
+ * E-Commerce Platform - Admin Panel
+ * 
+ * Features:
+ * - Payment transaction monitoring
+ * - Payment reconciliation
+ * - Gateway integration tracking
+ * - Payment analytics and reports
+ */
+
+// Global admin page requirements
+require_once __DIR__ . '/../../includes/auth.php';
+require_once __DIR__ . '/../../includes/db.php';
+require_once __DIR__ . '/../../includes/csrf.php';
+require_once __DIR__ . '/../../includes/rbac.php';
+require_once __DIR__ . '/../../includes/mailer.php';
+require_once __DIR__ . '/../../includes/audit_log.php';
+
+// Initialize with graceful fallback
+require_once __DIR__ . '/../../includes/init.php';
+
+// Database graceful fallback
+$database_available = false;
+$pdo = null;
+try {
+    $pdo = db();
+    $pdo->query('SELECT 1');
+    $database_available = true;
+} catch (Exception $e) {
+    $database_available = false;
+    error_log("Database connection failed: " . $e->getMessage());
+}
+
+if (!$database_available) {
+    die('Database connection failed. Please check your configuration.');
+}
+
+requireAdminAuth();
+checkPermission('payments.view');
+
+// Handle actions
+$action = $_GET['action'] ?? 'list';
+$payment_id = $_GET['id'] ?? '';
+$message = '';
+$error = '';
+
+// Process form submissions
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
+        $error = 'Invalid security token.';
+    } else {
+        try {
+            switch ($action) {
+                case 'reconcile':
+                    checkPermission('payments.reconcile');
+                    $gateway = sanitizeInput($_POST['gateway']);
+                    $batch_id = sanitizeInput($_POST['batch_id']);
+                    $settlement_date = $_POST['settlement_date'];
+                    $expected_amount = (float)$_POST['expected_amount'];
+                    $actual_amount = (float)$_POST['actual_amount'];
+                    $fee_amount = (float)$_POST['fee_amount'];
+                    $transaction_count = (int)$_POST['transaction_count'];
+                    $notes = sanitizeInput($_POST['notes']);
+                    
+                    $status = ($expected_amount == $actual_amount) ? 'matched' : 'discrepancy';
+                    
+                    $stmt = $pdo->prepare("
+                        INSERT INTO payment_reconciliations 
+                        (gateway, batch_id, settlement_date, expected_amount, actual_amount, 
+                         fee_amount, transaction_count, status, reconciled_by, reconciled_at, notes)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?)
+                    ");
+                    $stmt->execute([
+                        $gateway, $batch_id, $settlement_date, $expected_amount, $actual_amount,
+                        $fee_amount, $transaction_count, $status, $_SESSION['admin_id'], $notes
+                    ]);
+                    
+                    logAuditEvent('payment_reconciliation', $pdo->lastInsertId(), 'create', [
+                        'gateway' => $gateway,
+                        'batch_id' => $batch_id,
+                        'status' => $status,
+                        'expected_amount' => $expected_amount,
+                        'actual_amount' => $actual_amount
+                    ]);
+                    
+                    $message = 'Payment reconciliation recorded successfully.';
+                    break;
+                    
+                case 'update_payment':
+                    checkPermission('payments.reconcile');
+                    $id = (int)$_POST['id'];
+                    $status = sanitizeInput($_POST['status']);
+                    $notes = sanitizeInput($_POST['notes']);
+                    
+                    $stmt = $pdo->prepare("
+                        UPDATE payments 
+                        SET status = ?, updated_at = NOW()
+                        WHERE id = ?
+                    ");
+                    $stmt->execute([$status, $id]);
+                    
+                    logAuditEvent('payment', $id, 'status_update', [
+                        'new_status' => $status,
+                        'notes' => $notes
+                    ]);
+                    
+                    $message = 'Payment status updated successfully.';
+                    break;
+                    
+                case 'manual_reconcile':
+                    checkPermission('payments.reconcile');
+                    $reconciliation_id = (int)$_POST['reconciliation_id'];
+                    $status = sanitizeInput($_POST['status']);
+                    $notes = sanitizeInput($_POST['notes']);
+                    
+                    $stmt = $pdo->prepare("
+                        UPDATE payment_reconciliations 
+                        SET status = ?, reconciled_by = ?, reconciled_at = NOW(), notes = ?
+                        WHERE id = ?
+                    ");
+                    $stmt->execute([$status, $_SESSION['admin_id'], $notes, $reconciliation_id]);
+                    
+                    logAuditEvent('payment_reconciliation', $reconciliation_id, 'manual_reconcile', [
+                        'status' => $status,
+                        'notes' => $notes
+                    ]);
+                    
+                    $message = 'Reconciliation status updated successfully.';
+                    break;
+            }
+        } catch (Exception $e) {
+            $error = $e->getMessage();
+        }
+    }
+}
+
+// Get data for display
+$payments = [];
+$reconciliations = [];
+$payment_stats = [];
+$filters = [
+    'gateway' => $_GET['gateway'] ?? '',
+    'status' => $_GET['status'] ?? '',
+    'date_from' => $_GET['date_from'] ?? '',
+    'date_to' => $_GET['date_to'] ?? ''
+];
+
+try {
+    // Build WHERE clause for filters
+    $where_conditions = [];
+    $params = [];
+    
+    if (!empty($filters['gateway'])) {
+        $where_conditions[] = "p.gateway = ?";
+        $params[] = $filters['gateway'];
+    }
+    
+    if (!empty($filters['status'])) {
+        $where_conditions[] = "p.status = ?";
+        $params[] = $filters['status'];
+    }
+    
+    if (!empty($filters['date_from'])) {
+        $where_conditions[] = "DATE(p.created_at) >= ?";
+        $params[] = $filters['date_from'];
+    }
+    
+    if (!empty($filters['date_to'])) {
+        $where_conditions[] = "DATE(p.created_at) <= ?";
+        $params[] = $filters['date_to'];
+    }
+    
+    $where_clause = empty($where_conditions) ? '' : 'WHERE ' . implode(' AND ', $where_conditions);
+    
+    // Get payments with pagination
+    $page = (int)($_GET['page'] ?? 1);
+    $per_page = 50;
+    $offset = ($page - 1) * $per_page;
+    
+    $stmt = $pdo->prepare("
+        SELECT p.*, o.order_number, 
+               COALESCE(CONCAT(u.username), 'Guest') as customer_name, 
+               u.email as customer_email
+        FROM payments p
+        LEFT JOIN orders o ON p.order_id = o.id
+        LEFT JOIN users u ON o.user_id = u.id
+        {$where_clause}
+        ORDER BY p.created_at DESC
+        LIMIT {$per_page} OFFSET {$offset}
+    ");
+    $stmt->execute($params);
+    $payments = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    // Get total count for pagination
+    $stmt = $pdo->prepare("
+        SELECT COUNT(*) as total
+        FROM payments p
+        LEFT JOIN orders o ON p.order_id = o.id
+        {$where_clause}
+    ");
+    $stmt->execute($params);
+    $total_payments = $stmt->fetchColumn();
+    $total_pages = ceil($total_payments / $per_page);
+    
+    // Get payment statistics - Fixed MariaDB compatibility
+    $stmt = $pdo->query("
+        SELECT 
+            COUNT(*) as total_transactions,
+            SUM(CASE WHEN status = 'captured' THEN amount ELSE 0 END) as captured_amount,
+            SUM(CASE WHEN status = 'pending' THEN amount ELSE 0 END) as pending_amount,
+            SUM(CASE WHEN status = 'failed' THEN amount ELSE 0 END) as failed_amount,
+            SUM(CASE WHEN status = 'refunded' THEN amount ELSE 0 END) as refunded_amount,
+            COUNT(CASE WHEN status = 'captured' THEN 1 END) as captured_count,
+            COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending_count,
+            COUNT(CASE WHEN status = 'failed' THEN 1 END) as failed_count
+        FROM payments
+        WHERE DATE(created_at) >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+    ");
+    $payment_stats = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+    // Get recent reconciliations
+    $stmt = $pdo->query("
+        SELECT pr.*, u.username as reconciled_by_name
+        FROM payment_reconciliations pr
+        LEFT JOIN users u ON pr.reconciled_by = u.id
+        ORDER BY pr.created_at DESC
+        LIMIT 20
+    ");
+    $reconciliations = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    // Get available gateways
+    $stmt = $pdo->query("SELECT DISTINCT gateway FROM payments WHERE gateway IS NOT NULL ORDER BY gateway");
+    $gateways = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+} catch (Exception $e) {
+    $error = "Error loading payment data: " . $e->getMessage();
+    $payments = [];
+    $reconciliations = [];
+    $payment_stats = [
+        'total_transactions' => 0,
+        'captured_amount' => 0,
+        'pending_amount' => 0,
+        'failed_amount' => 0,
+        'refunded_amount' => 0,
+        'captured_count' => 0,
+        'pending_count' => 0,
+        'failed_count' => 0
+    ];
+    $gateways = [];
+}
+
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payment Tracking - Admin Panel</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .sidebar { min-height: 100vh; background-color: #2c3e50; }
+        .sidebar a { color: #bdc3c7; text-decoration: none; }
+        .sidebar a:hover { color: #fff; background-color: #34495e; }
+        .status-badge {
+            font-size: 0.8em;
+            padding: 4px 8px;
+            border-radius: 12px;
+        }
+        .discrepancy { background-color: #fff3cd; border-left: 4px solid #ffc107; }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Sidebar -->
+            <div class="col-md-2 sidebar p-3">
+                <h4 class="text-white mb-4">Admin Panel</h4>
+                <ul class="nav flex-column">
+                    <li class="nav-item">
+                        <a class="nav-link" href="../index.php">
+                            <i class="fas fa-tachometer-alt"></i> Dashboard
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="index.php">
+                            <i class="fas fa-credit-card"></i> Payments
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="../orders/index.php">
+                            <i class="fas fa-shopping-cart"></i> Orders
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="../finance/index.php">
+                            <i class="fas fa-chart-line"></i> Finance
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+            <!-- Main Content -->
+            <div class="col-md-10 p-4">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h2><i class="fas fa-credit-card text-primary"></i> Payment Tracking</h2>
+                    <div class="btn-group">
+                        <?php if (hasPermission('payments.reconcile')): ?>
+                        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#reconcileModal">
+                            <i class="fas fa-balance-scale"></i> New Reconciliation
+                        </button>
+                        <?php endif; ?>
+                        <button type="button" class="btn btn-success" onclick="exportPayments()">
+                            <i class="fas fa-download"></i> Export
+                        </button>
+                    </div>
+                </div>
+
+                <?php if ($message): ?>
+                    <div class="alert alert-success alert-dismissible fade show">
+                        <?= htmlspecialchars($message) ?>
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                <?php endif; ?>
+
+                <?php if ($error): ?>
+                    <div class="alert alert-danger alert-dismissible fade show">
+                        <?= htmlspecialchars($error) ?>
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                <?php endif; ?>
+
+                <!-- Payment Statistics -->
+                <div class="row mb-4">
+                    <div class="col-md-3">
+                        <div class="card bg-success text-white">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <h4>$<?= number_format($payment_stats['captured_amount'] ?? 0, 2) ?></h4>
+                                        <p class="mb-0">Captured (30d)</p>
+                                    </div>
+                                    <div class="align-self-center">
+                                        <i class="fas fa-check-circle fa-2x"></i>
+                                    </div>
+                                </div>
+                                <small><?= number_format($payment_stats['captured_count'] ?? 0) ?> transactions</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-warning text-white">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <h4>$<?= number_format($payment_stats['pending_amount'] ?? 0, 2) ?></h4>
+                                        <p class="mb-0">Pending (30d)</p>
+                                    </div>
+                                    <div class="align-self-center">
+                                        <i class="fas fa-clock fa-2x"></i>
+                                    </div>
+                                </div>
+                                <small><?= number_format($payment_stats['pending_count'] ?? 0) ?> transactions</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-danger text-white">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <h4>$<?= number_format($payment_stats['failed_amount'] ?? 0, 2) ?></h4>
+                                        <p class="mb-0">Failed (30d)</p>
+                                    </div>
+                                    <div class="align-self-center">
+                                        <i class="fas fa-times-circle fa-2x"></i>
+                                    </div>
+                                </div>
+                                <small><?= number_format($payment_stats['failed_count'] ?? 0) ?> transactions</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-info text-white">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <h4>$<?= number_format($payment_stats['refunded_amount'] ?? 0, 2) ?></h4>
+                                        <p class="mb-0">Refunded (30d)</p>
+                                    </div>
+                                    <div class="align-self-center">
+                                        <i class="fas fa-undo fa-2x"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Filters -->
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <form method="GET" class="row g-3">
+                            <div class="col-md-2">
+                                <label class="form-label">Gateway</label>
+                                <select name="gateway" class="form-select">
+                                    <option value="">All Gateways</option>
+                                    <?php foreach ($gateways as $gateway): ?>
+                                    <option value="<?= htmlspecialchars($gateway) ?>" <?= $filters['gateway'] === $gateway ? 'selected' : '' ?>>
+                                        <?= htmlspecialchars(ucfirst($gateway)) ?>
+                                    </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">Status</label>
+                                <select name="status" class="form-select">
+                                    <option value="">All Statuses</option>
+                                    <option value="pending" <?= $filters['status'] === 'pending' ? 'selected' : '' ?>>Pending</option>
+                                    <option value="captured" <?= $filters['status'] === 'captured' ? 'selected' : '' ?>>Captured</option>
+                                    <option value="failed" <?= $filters['status'] === 'failed' ? 'selected' : '' ?>>Failed</option>
+                                    <option value="refunded" <?= $filters['status'] === 'refunded' ? 'selected' : '' ?>>Refunded</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">Date From</label>
+                                <input type="date" name="date_from" class="form-control" value="<?= htmlspecialchars($filters['date_from']) ?>">
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">Date To</label>
+                                <input type="date" name="date_to" class="form-control" value="<?= htmlspecialchars($filters['date_to']) ?>">
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">&nbsp;</label>
+                                <button type="submit" class="btn btn-primary d-block w-100">Filter</button>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">&nbsp;</label>
+                                <a href="index.php" class="btn btn-secondary d-block w-100">Clear</a>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Payments Table -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">Payment Transactions</h5>
+                    </div>
+                    <div class="card-body">
+                        <?php if (!empty($payments)): ?>
+                        <div class="table-responsive">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Transaction ID</th>
+                                        <th>Order</th>
+                                        <th>Customer</th>
+                                        <th>Gateway</th>
+                                        <th>Amount</th>
+                                        <th>Status</th>
+                                        <th>Date</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($payments as $payment): ?>
+                                    <tr>
+                                        <td><code><?= htmlspecialchars($payment['transaction_id'] ?? 'N/A') ?></code></td>
+                                        <td>
+                                            <?php if (!empty($payment['order_number'])): ?>
+                                            <a href="../orders/index.php?action=view&id=<?= $payment['order_id'] ?>">
+                                                #<?= htmlspecialchars($payment['order_number']) ?>
+                                            </a>
+                                            <?php else: ?>
+                                            <span class="text-muted">N/A</span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td>
+                                            <?php if (!empty($payment['customer_name']) && $payment['customer_name'] !== 'Guest'): ?>
+                                            <?= htmlspecialchars($payment['customer_name']) ?><br>
+                                            <small class="text-muted"><?= htmlspecialchars($payment['customer_email'] ?? '') ?></small>
+                                            <?php else: ?>
+                                            <span class="text-muted">Guest</span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td><?= htmlspecialchars(ucfirst($payment['gateway'] ?? 'Unknown')) ?></td>
+                                        <td>$<?= number_format($payment['amount'] ?? 0, 2) ?> <?= htmlspecialchars($payment['currency'] ?? 'USD') ?></td>
+                                        <td>
+                                            <?php
+                                            $status_colors = [
+                                                'pending' => 'warning',
+                                                'captured' => 'success',
+                                                'failed' => 'danger',
+                                                'refunded' => 'info',
+                                                'cancelled' => 'secondary'
+                                            ];
+                                            $color = $status_colors[$payment['status']] ?? 'secondary';
+                                            ?>
+                                            <span class="badge bg-<?= $color ?>"><?= ucfirst($payment['status'] ?? 'Unknown') ?></span>
+                                        </td>
+                                        <td><?= date('M j, Y g:i A', strtotime($payment['created_at'])) ?></td>
+                                        <td>
+                                            <?php if (hasPermission('payments.reconcile')): ?>
+                                            <button class="btn btn-sm btn-outline-primary" onclick="viewPayment(<?= $payment['id'] ?>)">
+                                                <i class="fas fa-eye"></i>
+                                            </button>
+                                            <button class="btn btn-sm btn-outline-secondary" onclick="updatePaymentStatus(<?= $payment['id'] ?>, '<?= $payment['status'] ?>')">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                            <?php endif; ?>
+                                        </td>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        <!-- Pagination -->
+                        <?php if (isset($total_pages) && $total_pages > 1): ?>
+                        <nav aria-label="Payment pagination">
+                            <ul class="pagination justify-content-center">
+                                <?php for ($i = 1; $i <= $total_pages; $i++): ?>
+                                <li class="page-item <?= $i === $page ? 'active' : '' ?>">
+                                    <a class="page-link" href="?page=<?= $i ?>&<?= http_build_query($filters) ?>"><?= $i ?></a>
+                                </li>
+                                <?php endfor; ?>
+                            </ul>
+                        </nav>
+                        <?php endif; ?>
+                        <?php else: ?>
+                        <div class="text-center py-4">
+                            <i class="fas fa-credit-card fa-3x text-muted mb-3"></i>
+                            <h5>No Payments Found</h5>
+                            <p class="text-muted">No payment records match your current filters.</p>
+                        </div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+
+                <!-- Reconciliations -->
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">Recent Reconciliations</h5>
+                    </div>
+                    <div class="card-body">
+                        <?php if (!empty($reconciliations)): ?>
+                        <div class="table-responsive">
+                            <table class="table table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>Gateway</th>
+                                        <th>Batch ID</th>
+                                        <th>Settlement Date</th>
+                                        <th>Expected</th>
+                                        <th>Actual</th>
+                                        <th>Status</th>
+                                        <th>Reconciled By</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($reconciliations as $recon): ?>
+                                    <tr class="<?= $recon['status'] === 'discrepancy' ? 'discrepancy' : '' ?>">
+                                        <td><?= htmlspecialchars(ucfirst($recon['gateway'] ?? 'Unknown')) ?></td>
+                                        <td><code><?= htmlspecialchars($recon['batch_id'] ?? 'N/A') ?></code></td>
+                                        <td><?= date('M j, Y', strtotime($recon['settlement_date'])) ?></td>
+                                        <td>$<?= number_format($recon['expected_amount'] ?? 0, 2) ?></td>
+                                        <td>$<?= number_format($recon['actual_amount'] ?? 0, 2) ?></td>
+                                        <td>
+                                            <?php
+                                            $status_colors = [
+                                                'pending' => 'warning',
+                                                'matched' => 'success',
+                                                'discrepancy' => 'danger',
+                                                'resolved' => 'info'
+                                            ];
+                                            $color = $status_colors[$recon['status']] ?? 'secondary';
+                                            ?>
+                                            <span class="badge bg-<?= $color ?>"><?= ucfirst($recon['status'] ?? 'Unknown') ?></span>
+                                        </td>
+                                        <td><?= htmlspecialchars($recon['reconciled_by_name'] ?? 'System') ?></td>
+                                        <td>
+                                            <?php if (hasPermission('payments.reconcile') && $recon['status'] === 'discrepancy'): ?>
+                                            <button class="btn btn-sm btn-outline-warning" onclick="resolveDiscrepancy(<?= $recon['id'] ?>)">
+                                                <i class="fas fa-wrench"></i> Resolve
+                                            </button>
+                                            <?php endif; ?>
+                                        </td>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                        <?php else: ?>
+                        <div class="text-center py-4">
+                            <i class="fas fa-balance-scale fa-3x text-muted mb-3"></i>
+                            <h5>No Reconciliations</h5>
+                            <p class="text-muted">No reconciliation records found.</p>
+                        </div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reconciliation Modal -->
+    <div class="modal fade" id="reconcileModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <form method="POST" action="?action=reconcile">
+                    <div class="modal-header">
+                        <h5 class="modal-title">New Payment Reconciliation</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Gateway *</label>
+                                    <select name="gateway" class="form-select" required>
+                                        <option value="">Select Gateway</option>
+                                        <?php foreach ($gateways as $gateway): ?>
+                                        <option value="<?= htmlspecialchars($gateway) ?>"><?= htmlspecialchars(ucfirst($gateway)) ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">Batch ID *</label>
+                                    <input type="text" name="batch_id" class="form-control" required>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">Settlement Date *</label>
+                                    <input type="date" name="settlement_date" class="form-control" required>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">Transaction Count</label>
+                                    <input type="number" name="transaction_count" class="form-control" min="0" value="0">
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Expected Amount *</label>
+                                    <input type="number" name="expected_amount" class="form-control" step="0.01" required>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">Actual Amount *</label>
+                                    <input type="number" name="actual_amount" class="form-control" step="0.01" required>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">Fee Amount</label>
+                                    <input type="number" name="fee_amount" class="form-control" step="0.01" value="0">
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">Notes</label>
+                                    <textarea name="notes" class="form-control" rows="3"></textarea>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Record Reconciliation</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Payment Status Update Modal -->
+    <div class="modal fade" id="statusModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form method="POST" action="?action=update_payment">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Update Payment Status</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
+                        <input type="hidden" name="id" id="status_payment_id">
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Status</label>
+                            <select name="status" id="status_select" class="form-select" required>
+                                <option value="pending">Pending</option>
+                                <option value="authorized">Authorized</option>
+                                <option value="captured">Captured</option>
+                                <option value="failed">Failed</option>
+                                <option value="cancelled">Cancelled</option>
+                                <option value="refunded">Refunded</option>
+                                <option value="partially_refunded">Partially Refunded</option>
+                            </select>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Notes</label>
+                            <textarea name="notes" class="form-control" rows="3"></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Update Status</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function updatePaymentStatus(paymentId, currentStatus) {
+            document.getElementById('status_payment_id').value = paymentId;
+            document.getElementById('status_select').value = currentStatus;
+            
+            var modal = new bootstrap.Modal(document.getElementById('statusModal'));
+            modal.show();
+        }
+        
+        function viewPayment(paymentId) {
+            // Implementation for viewing payment details
+            alert('View payment details functionality to be implemented');
+        }
+        
+        function resolveDiscrepancy(reconciliationId) {
+            // Implementation for resolving reconciliation discrepancy
+            alert('Resolve discrepancy functionality to be implemented');
+        }
+        
+        function exportPayments() {
+            const filters = new URLSearchParams(window.location.search);
+            filters.set('export', '1');
+            window.location.href = '?' + filters.toString();
+        }
+    </script>
+</body>
+</html>

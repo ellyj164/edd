@@ -1,0 +1,5 @@
+<svg width="1200" height="400" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="400" fill="#667eea"/>
+  <text x="600" y="200" text-anchor="middle" font-family="Arial" font-size="36" fill="white">New &amp; Trending</text>
+  <text x="600" y="240" text-anchor="middle" font-family="Arial" font-size="24" fill="white">Editor's Picks</text>
+</svg>

@@ -1,0 +1,636 @@
+<?php
+/**
+ * Content Management System Module
+ * E-Commerce Platform - Admin Panel
+ * 
+ * Features:
+ * - CMS page management
+ * - Banner and advertisement management
+ * - Navigation menu builder
+ * - SEO optimization
+ */
+
+// Global admin page requirements
+require_once __DIR__ . '/../../includes/auth.php';
+require_once __DIR__ . '/../../includes/db.php';
+require_once __DIR__ . '/../../includes/csrf.php';
+require_once __DIR__ . '/../../includes/rbac.php';
+require_once __DIR__ . '/../../includes/mailer.php';
+require_once __DIR__ . '/../../includes/audit_log.php';
+
+try {
+    require_once __DIR__ . '/../../includes/init.php';
+    // Initialize PDO global variable for this module
+    $pdo = db();
+    requireAdminAuth();
+    checkPermission('cms.view');
+} catch (Exception $e) {
+    error_log("CMS module error: " . $e->getMessage());
+    header('Location: ../index.php?error=access_denied');
+    exit;
+}
+
+// Handle actions
+$action = $_GET['action'] ?? 'list';
+$tab = $_GET['tab'] ?? 'pages';
+$item_id = $_GET['id'] ?? '';
+$message = '';
+$error = '';
+
+// Process form submissions
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!validateCSRFToken($_POST['csrf_token'] ?? '')) {
+        $error = 'Invalid security token.';
+    } else {
+        try {
+            switch ($action) {
+                case 'save_page':
+                    checkPermission('cms.manage');
+                    $id = !empty($_POST['id']) ? (int)$_POST['id'] : null;
+                    $title = sanitizeInput($_POST['title']);
+                    $slug = sanitizeInput($_POST['slug']);
+                    $content = $_POST['content']; // Allow HTML content
+                    $excerpt = sanitizeInput($_POST['excerpt']);
+                    $status = sanitizeInput($_POST['status']);
+                    $meta_title = sanitizeInput($_POST['meta_title']);
+                    $meta_description = sanitizeInput($_POST['meta_description']);
+                    
+                    if (empty($slug)) {
+                        $slug = generateSlug($title);
+                    } else {
+                        $slug = generateSlug($slug);
+                    }
+                    
+                    // Check if slug exists (excluding current page)
+                    $stmt = $pdo->prepare("SELECT id FROM cms_pages WHERE slug = ? AND id != ?");
+                    $stmt->execute([$slug, $id ?: 0]);
+                    if ($stmt->fetch()) {
+                        throw new Exception('Slug already exists. Please choose a different one.');
+                    }
+                    
+                    if ($id) {
+                        // Update existing page
+                        $stmt = $pdo->prepare("
+                            UPDATE cms_pages 
+                            SET title = ?, slug = ?, content = ?, excerpt = ?, status = ?, 
+                                meta_title = ?, meta_description = ?, 
+                                published_at = CASE WHEN status = 'published' AND published_at IS NULL THEN NOW() ELSE published_at END
+                            WHERE id = ?
+                        ");
+                        $stmt->execute([$title, $slug, $content, $excerpt, $status, $meta_title, $meta_description, $id]);
+                        
+                        logAuditEvent('cms_page', $id, 'update', ['title' => $title, 'status' => $status]);
+                        $message = 'Page updated successfully.';
+                    } else {
+                        // Create new page
+                        $stmt = $pdo->prepare("
+                            INSERT INTO cms_pages 
+                            (title, slug, content, excerpt, status, meta_title, meta_description, author_id, published_at)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, CASE WHEN ? = 'published' THEN NOW() ELSE NULL END)
+                        ");
+                        $stmt->execute([
+                            $title, $slug, $content, $excerpt, $status, $meta_title, $meta_description, 
+                            $_SESSION['admin_id'], $status
+                        ]);
+                        
+                        $page_id = $pdo->lastInsertId();
+                        logAuditEvent('cms_page', $page_id, 'create', ['title' => $title, 'status' => $status]);
+                        $message = 'Page created successfully.';
+                    }
+                    break;
+                    
+                case 'save_banner':
+                    checkPermission('banners.manage');
+                    $id = !empty($_POST['id']) ? (int)$_POST['id'] : null;
+                    $title = sanitizeInput($_POST['title']);
+                    $image_path = sanitizeInput($_POST['image_path']);
+                    $link_url = sanitizeInput($_POST['link_url']);
+                    $alt_text = sanitizeInput($_POST['alt_text']);
+                    $position = sanitizeInput($_POST['position']);
+                    $sort_order = (int)$_POST['sort_order'];
+                    $status = sanitizeInput($_POST['status']);
+                    $starts_at = !empty($_POST['starts_at']) ? $_POST['starts_at'] : null;
+                    $expires_at = !empty($_POST['expires_at']) ? $_POST['expires_at'] : null;
+                    
+                    if ($id) {
+                        // Update existing banner
+                        $stmt = $pdo->prepare("
+                            UPDATE banners 
+                            SET title = ?, image_path = ?, link_url = ?, alt_text = ?, position = ?, 
+                                sort_order = ?, status = ?, starts_at = ?, expires_at = ?
+                            WHERE id = ?
+                        ");
+                        $stmt->execute([
+                            $title, $image_path, $link_url, $alt_text, $position, 
+                            $sort_order, $status, $starts_at, $expires_at, $id
+                        ]);
+                        
+                        logAuditEvent('banner', $id, 'update', ['title' => $title, 'position' => $position]);
+                        $message = 'Banner updated successfully.';
+                    } else {
+                        // Create new banner
+                        $stmt = $pdo->prepare("
+                            INSERT INTO banners 
+                            (title, image_path, link_url, alt_text, position, sort_order, status, 
+                             starts_at, expires_at, created_by)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ");
+                        $stmt->execute([
+                            $title, $image_path, $link_url, $alt_text, $position, $sort_order, 
+                            $status, $starts_at, $expires_at, $_SESSION['admin_id']
+                        ]);
+                        
+                        $banner_id = $pdo->lastInsertId();
+                        logAuditEvent('banner', $banner_id, 'create', ['title' => $title, 'position' => $position]);
+                        $message = 'Banner created successfully.';
+                    }
+                    break;
+                    
+                case 'delete_item':
+                    $item_type = sanitizeInput($_POST['item_type']);
+                    $item_id = (int)$_POST['item_id'];
+                    
+                    if ($item_type === 'page') {
+                        checkPermission('cms.manage');
+                        $stmt = $pdo->prepare("DELETE FROM cms_pages WHERE id = ?");
+                        $stmt->execute([$item_id]);
+                        logAuditEvent('cms_page', $item_id, 'delete');
+                    } elseif ($item_type === 'banner') {
+                        checkPermission('banners.manage');
+                        $stmt = $pdo->prepare("DELETE FROM banners WHERE id = ?");
+                        $stmt->execute([$item_id]);
+                        logAuditEvent('banner', $item_id, 'delete');
+                    }
+                    
+                    $message = ucfirst($item_type) . ' deleted successfully.';
+                    break;
+            }
+        } catch (Exception $e) {
+            $error = $e->getMessage();
+        }
+    }
+}
+
+// Get data for display
+$pages = [];
+$banners = [];
+$menus = [];
+$cms_stats = [];
+
+try {
+    // Get CMS pages
+    $stmt = $pdo->query("
+        SELECT p.*, u.name as author_name
+        FROM cms_pages p
+        LEFT JOIN users u ON p.author_id = u.id
+        ORDER BY p.updated_at DESC
+    ");
+    $pages = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    // Get banners
+    $stmt = $pdo->query("
+        SELECT b.*, u.name as created_by_name
+        FROM banners b
+        LEFT JOIN users u ON b.created_by = u.id
+        ORDER BY b.position, b.sort_order
+    ");
+    $banners = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    // Get menus
+    $stmt = $pdo->query("
+        SELECT m.*, COUNT(mi.id) as item_count
+        FROM menus m
+        LEFT JOIN menu_items mi ON m.id = mi.menu_id
+        GROUP BY m.id
+        ORDER BY m.name
+    ");
+    $menus = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    // Get CMS statistics
+    $stmt = $pdo->query("
+        SELECT 
+            COUNT(CASE WHEN status = 'published' THEN 1 END) as published_pages,
+            COUNT(CASE WHEN status = 'draft' THEN 1 END) as draft_pages,
+            COUNT(*) as total_pages
+        FROM cms_pages
+    ");
+    $page_stats = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+    $stmt = $pdo->query("
+        SELECT 
+            COUNT(CASE WHEN status = 'active' THEN 1 END) as active_banners,
+            COUNT(*) as total_banners,
+            SUM(click_count) as total_clicks,
+            SUM(impression_count) as total_impressions
+        FROM banners
+    ");
+    $banner_stats = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+    $cms_stats = array_merge($page_stats, $banner_stats);
+    
+} catch (Exception $e) {
+    $error = 'Error loading CMS data: ' . $e->getMessage();
+}
+
+// Helper function to generate slug
+function generateSlug($text) {
+    $text = strtolower($text);
+    $text = preg_replace('/[^a-z0-9\-]/', '-', $text);
+    $text = preg_replace('/-+/', '-', $text);
+    return trim($text, '-');
+}
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Content Management - Admin Panel</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .sidebar { min-height: 100vh; background-color: #2c3e50; }
+        .sidebar a { color: #bdc3c7; text-decoration: none; }
+        .sidebar a:hover { color: #fff; background-color: #34495e; }
+        .content-editor { min-height: 400px; }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Sidebar -->
+            <div class="col-md-2 sidebar p-3">
+                <h4 class="text-white mb-4">Admin Panel</h4>
+                <ul class="nav flex-column">
+                    <li class="nav-item">
+                        <a class="nav-link" href="../index.php">
+                            <i class="fas fa-tachometer-alt"></i> Dashboard
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="index.php">
+                            <i class="fas fa-file-alt"></i> Content
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="../categories/index.php">
+                            <i class="fas fa-tags"></i> Categories
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="../campaigns/index.php">
+                            <i class="fas fa-bullhorn"></i> Marketing
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+            <!-- Main Content -->
+            <div class="col-md-10 p-4">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h2><i class="fas fa-file-alt text-primary"></i> Content Management</h2>
+                    <div class="btn-group">
+                        <?php if (hasPermission('cms.manage')): ?>
+                        <button type="button" class="btn btn-primary" onclick="createPage()">
+                            <i class="fas fa-plus"></i> New Page
+                        </button>
+                        <?php endif; ?>
+                        <?php if (hasPermission('banners.manage')): ?>
+                        <button type="button" class="btn btn-success" onclick="createBanner()">
+                            <i class="fas fa-image"></i> New Banner
+                        </button>
+                        <?php endif; ?>
+                    </div>
+                </div>
+
+                <?php if ($message): ?>
+                    <div class="alert alert-success alert-dismissible fade show">
+                        <?= htmlspecialchars($message) ?>
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                <?php endif; ?>
+
+                <?php if ($error): ?>
+                    <div class="alert alert-danger alert-dismissible fade show">
+                        <?= htmlspecialchars($error) ?>
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                <?php endif; ?>
+
+                <!-- CMS Statistics -->
+                <div class="row mb-4">
+                    <div class="col-md-3">
+                        <div class="card bg-primary text-white">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <h4><?= number_format($cms_stats['published_pages']) ?></h4>
+                                        <p class="mb-0">Published Pages</p>
+                                    </div>
+                                    <div class="align-self-center">
+                                        <i class="fas fa-file-alt fa-2x"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-warning text-white">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <h4><?= number_format($cms_stats['draft_pages']) ?></h4>
+                                        <p class="mb-0">Draft Pages</p>
+                                    </div>
+                                    <div class="align-self-center">
+                                        <i class="fas fa-edit fa-2x"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-success text-white">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <h4><?= number_format($cms_stats['active_banners']) ?></h4>
+                                        <p class="mb-0">Active Banners</p>
+                                    </div>
+                                    <div class="align-self-center">
+                                        <i class="fas fa-image fa-2x"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-info text-white">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <h4><?= number_format($cms_stats['total_clicks']) ?></h4>
+                                        <p class="mb-0">Banner Clicks</p>
+                                    </div>
+                                    <div class="align-self-center">
+                                        <i class="fas fa-mouse-pointer fa-2x"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Content Tabs -->
+                <div class="card">
+                    <div class="card-header">
+                        <ul class="nav nav-tabs card-header-tabs" role="tablist">
+                            <li class="nav-item">
+                                <button class="nav-link <?= $tab === 'pages' ? 'active' : '' ?>" 
+                                        data-bs-toggle="tab" data-bs-target="#pages-tab">
+                                    <i class="fas fa-file-alt"></i> Pages
+                                </button>
+                            </li>
+                            <li class="nav-item">
+                                <button class="nav-link <?= $tab === 'banners' ? 'active' : '' ?>" 
+                                        data-bs-toggle="tab" data-bs-target="#banners-tab">
+                                    <i class="fas fa-image"></i> Banners
+                                </button>
+                            </li>
+                            <li class="nav-item">
+                                <button class="nav-link <?= $tab === 'menus' ? 'active' : '' ?>" 
+                                        data-bs-toggle="tab" data-bs-target="#menus-tab">
+                                    <i class="fas fa-bars"></i> Menus
+                                </button>
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="card-body">
+                        <div class="tab-content">
+                            <!-- Pages Tab -->
+                            <div class="tab-pane fade <?= $tab === 'pages' ? 'show active' : '' ?>" id="pages-tab">
+                                <div class="table-responsive">
+                                    <table class="table table-striped">
+                                        <thead>
+                                            <tr>
+                                                <th>Title</th>
+                                                <th>Slug</th>
+                                                <th>Status</th>
+                                                <th>Author</th>
+                                                <th>Updated</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <?php foreach ($pages as $page): ?>
+                                            <tr>
+                                                <td>
+                                                    <strong><?= htmlspecialchars($page['title']) ?></strong>
+                                                    <?php if ($page['excerpt']): ?>
+                                                    <br><small class="text-muted"><?= htmlspecialchars(substr($page['excerpt'], 0, 100)) ?>...</small>
+                                                    <?php endif; ?>
+                                                </td>
+                                                <td><code>/<?= htmlspecialchars($page['slug']) ?></code></td>
+                                                <td>
+                                                    <?php
+                                                    $status_colors = [
+                                                        'published' => 'success',
+                                                        'draft' => 'warning',
+                                                        'archived' => 'secondary'
+                                                    ];
+                                                    $color = $status_colors[$page['status']] ?? 'secondary';
+                                                    ?>
+                                                    <span class="badge bg-<?= $color ?>"><?= ucfirst($page['status']) ?></span>
+                                                </td>
+                                                <td><?= htmlspecialchars($page['author_name']) ?></td>
+                                                <td><?= date('M j, Y', strtotime($page['updated_at'])) ?></td>
+                                                <td>
+                                                    <?php if (hasPermission('cms.manage')): ?>
+                                                    <button class="btn btn-sm btn-outline-primary" onclick="editPage(<?= $page['id'] ?>)">
+                                                        <i class="fas fa-edit"></i>
+                                                    </button>
+                                                    <button class="btn btn-sm btn-outline-danger" onclick="deleteItem('page', <?= $page['id'] ?>, '<?= htmlspecialchars($page['title']) ?>')">
+                                                        <i class="fas fa-trash"></i>
+                                                    </button>
+                                                    <?php endif; ?>
+                                                    <a href="/<?= htmlspecialchars($page['slug']) ?>" target="_blank" class="btn btn-sm btn-outline-secondary">
+                                                        <i class="fas fa-external-link-alt"></i>
+                                                    </a>
+                                                </td>
+                                            </tr>
+                                            <?php endforeach; ?>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <!-- Banners Tab -->
+                            <div class="tab-pane fade <?= $tab === 'banners' ? 'show active' : '' ?>" id="banners-tab">
+                                <div class="table-responsive">
+                                    <table class="table table-striped">
+                                        <thead>
+                                            <tr>
+                                                <th>Title</th>
+                                                <th>Position</th>
+                                                <th>Status</th>
+                                                <th>Performance</th>
+                                                <th>Schedule</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <?php foreach ($banners as $banner): ?>
+                                            <tr>
+                                                <td>
+                                                    <strong><?= htmlspecialchars($banner['title']) ?></strong>
+                                                    <?php if ($banner['image_path']): ?>
+                                                    <br><small class="text-muted"><?= htmlspecialchars($banner['image_path']) ?></small>
+                                                    <?php endif; ?>
+                                                </td>
+                                                <td><?= ucfirst($banner['position']) ?></td>
+                                                <td>
+                                                    <?php
+                                                    $status_colors = ['active' => 'success', 'inactive' => 'secondary'];
+                                                    $color = $status_colors[$banner['status']] ?? 'secondary';
+                                                    ?>
+                                                    <span class="badge bg-<?= $color ?>"><?= ucfirst($banner['status']) ?></span>
+                                                </td>
+                                                <td>
+                                                    <small>
+                                                        Clicks: <?= number_format($banner['click_count']) ?><br>
+                                                        Views: <?= number_format($banner['impression_count']) ?>
+                                                    </small>
+                                                </td>
+                                                <td>
+                                                    <?php if ($banner['starts_at'] || $banner['expires_at']): ?>
+                                                    <small>
+                                                        <?php if ($banner['starts_at']): ?>
+                                                        From: <?= date('M j', strtotime($banner['starts_at'])) ?><br>
+                                                        <?php endif; ?>
+                                                        <?php if ($banner['expires_at']): ?>
+                                                        Until: <?= date('M j', strtotime($banner['expires_at'])) ?>
+                                                        <?php endif; ?>
+                                                    </small>
+                                                    <?php else: ?>
+                                                    <span class="text-muted">Always</span>
+                                                    <?php endif; ?>
+                                                </td>
+                                                <td>
+                                                    <?php if (hasPermission('banners.manage')): ?>
+                                                    <button class="btn btn-sm btn-outline-primary" onclick="editBanner(<?= $banner['id'] ?>)">
+                                                        <i class="fas fa-edit"></i>
+                                                    </button>
+                                                    <button class="btn btn-sm btn-outline-danger" onclick="deleteItem('banner', <?= $banner['id'] ?>, '<?= htmlspecialchars($banner['title']) ?>')">
+                                                        <i class="fas fa-trash"></i>
+                                                    </button>
+                                                    <?php endif; ?>
+                                                </td>
+                                            </tr>
+                                            <?php endforeach; ?>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <!-- Menus Tab -->
+                            <div class="tab-pane fade <?= $tab === 'menus' ? 'show active' : '' ?>" id="menus-tab">
+                                <div class="table-responsive">
+                                    <table class="table table-striped">
+                                        <thead>
+                                            <tr>
+                                                <th>Menu Name</th>
+                                                <th>Location</th>
+                                                <th>Items</th>
+                                                <th>Status</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <?php foreach ($menus as $menu): ?>
+                                            <tr>
+                                                <td>
+                                                    <strong><?= htmlspecialchars($menu['name']) ?></strong>
+                                                    <?php if ($menu['description']): ?>
+                                                    <br><small class="text-muted"><?= htmlspecialchars($menu['description']) ?></small>
+                                                    <?php endif; ?>
+                                                </td>
+                                                <td><?= ucfirst($menu['location']) ?></td>
+                                                <td><?= number_format($menu['item_count']) ?> items</td>
+                                                <td>
+                                                    <span class="badge bg-<?= $menu['is_active'] ? 'success' : 'secondary' ?>">
+                                                        <?= $menu['is_active'] ? 'Active' : 'Inactive' ?>
+                                                    </span>
+                                                </td>
+                                                <td>
+                                                    <?php if (hasPermission('menus.manage')): ?>
+                                                    <button class="btn btn-sm btn-outline-primary" onclick="editMenu(<?= $menu['id'] ?>)">
+                                                        <i class="fas fa-edit"></i> Manage
+                                                    </button>
+                                                    <?php endif; ?>
+                                                </td>
+                                            </tr>
+                                            <?php endforeach; ?>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function createPage() {
+            window.location.href = '?action=edit&type=page';
+        }
+        
+        function editPage(pageId) {
+            window.location.href = '?action=edit&type=page&id=' + pageId;
+        }
+        
+        function createBanner() {
+            window.location.href = '?action=edit&type=banner';
+        }
+        
+        function editBanner(bannerId) {
+            window.location.href = '?action=edit&type=banner&id=' + bannerId;
+        }
+        
+        function editMenu(menuId) {
+            window.location.href = '?action=edit&type=menu&id=' + menuId;
+        }
+        
+        function deleteItem(type, itemId, itemName) {
+            if (confirm(`Are you sure you want to delete the ${type} "${itemName}"?`)) {
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = '?action=delete_item';
+                
+                const csrfInput = document.createElement('input');
+                csrfInput.type = 'hidden';
+                csrfInput.name = 'csrf_token';
+                csrfInput.value = '<?= generateCSRFToken() ?>';
+                
+                const typeInput = document.createElement('input');
+                typeInput.type = 'hidden';
+                typeInput.name = 'item_type';
+                typeInput.value = type;
+                
+                const idInput = document.createElement('input');
+                idInput.type = 'hidden';
+                idInput.name = 'item_id';
+                idInput.value = itemId;
+                
+                form.appendChild(csrfInput);
+                form.appendChild(typeInput);
+                form.appendChild(idInput);
+                document.body.appendChild(form);
+                form.submit();
+            }
+        }
+    </script>
+</body>
+</html>

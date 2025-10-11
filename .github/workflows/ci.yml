@@ -1,0 +1,102 @@
+name: EPD Platform CI/CD
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test-and-screenshot:
+    runs-on: ubuntu-latest
+    
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: ecommerce_platform
+          MYSQL_USER: duns1
+          MYSQL_PASSWORD: Tumukunde
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+        ports:
+          - 3306:3306
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Setup PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: '8.3'
+        extensions: mbstring, xml, ctype, iconv, intl, pdo_mysql, dom, filter, gd, iconv, json, mbstring, pdo
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        
+    - name: Install Playwright
+      run: |
+        npm init -y
+        npm install playwright
+        npx playwright install chromium
+        
+    - name: Wait for MariaDB
+      run: |
+        for i in {30..0}; do
+          if mysqladmin ping -h 127.0.0.1 -P 3306 -u root -proot; then
+            break
+          fi
+          echo "Waiting for MariaDB..."
+          sleep 2
+        done
+        
+    - name: Import Database Schema
+      run: |
+        mysql -h 127.0.0.1 -P 3306 -u root -proot ecommerce_platform < database/schema.sql
+        
+    - name: Setup Environment
+      run: |
+        cp .env.example .env
+        echo "DB_HOST=127.0.0.1" >> .env
+        echo "DB_PORT=3306" >> .env
+        echo "DB_NAME=ecommerce_platform" >> .env
+        echo "DB_USER=root" >> .env
+        echo "DB_PASS=root" >> .env
+        echo "ADMIN_BYPASS=true" >> .env
+        echo "APP_ENV=development" >> .env
+        
+    - name: Start PHP Development Server
+      run: |
+        php -S localhost:8000 -t . > server.log 2>&1 &
+        sleep 5
+        
+    - name: Run Smoke Tests
+      run: |
+        php scripts/smoke_test.php
+        
+    - name: Capture Screenshots
+      run: |
+        mkdir -p docs/screenshots
+        BASE_URL=http://localhost:8000 node screenshot-automation-enhanced.js
+        
+    - name: Upload Screenshots as Artifacts
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: epd-screenshots
+        path: docs/screenshots/
+        retention-days: 30
+        
+    - name: Upload Server Logs
+      uses: actions/upload-artifact@v3
+      if: failure()
+      with:
+        name: server-logs
+        path: server.log
+        retention-days: 7

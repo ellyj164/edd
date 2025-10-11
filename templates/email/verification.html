@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verify Your Email Address</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background-color: #f8f9fa; }
+        .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; }
+        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px 20px; text-align: center; }
+        .header h1 { color: #ffffff; margin: 0; font-size: 28px; font-weight: 300; }
+        .content { padding: 40px 30px; }
+        .btn { display: inline-block; padding: 15px 30px; background-color: #28a745; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600; margin: 20px 0; }
+        .btn:hover { background-color: #218838; }
+        .footer { background-color: #f8f9fa; padding: 20px; text-align: center; font-size: 12px; color: #6c757d; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Welcome to {{app_name}}!</h1>
+        </div>
+        <div class="content">
+            <h2>Hi {{user_name}},</h2>
+            <p>Thank you for joining {{app_name}}! We're excited to have you as part of our community.</p>
+            <p>To get started, please verify your email address by clicking the button below:</p>
+            <div style="text-align: center;">
+                <a href="{{verification_url}}" class="btn">Verify Email Address</a>
+            </div>
+            <p style="margin-top: 30px;">Or copy and paste this link into your browser:</p>
+            <p style="word-break: break-all; background-color: #f8f9fa; padding: 10px; border-radius: 4px;">
+                <a href="{{verification_url}}">{{verification_url}}</a>
+            </p>
+            <div style="background-color: #fff3cd; border: 1px solid #ffeaa7; border-radius: 4px; padding: 15px; margin: 20px 0;">
+                <strong>Important:</strong> This verification link will expire in 24 hours for security reasons.
+            </div>
+        </div>
+        <div class="footer">
+            <p>This email was sent from {{app_name}} | <a href="{{app_url}}">{{app_url}}</a></p>
+            <p>If you didn't create an account with us, please ignore this email.</p>
+        </div>
+    </div>
+</body>
+</html>
