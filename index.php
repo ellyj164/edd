@@ -1782,7 +1782,7 @@ body {
 .tech-image-small img,
 .assembly-hero-image,
 .pg-model {
-    object-fit: cover !important;
+    object-fit: contain !important;
     width: 100%;
     height: 100%;
 }
