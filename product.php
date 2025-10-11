@@ -556,11 +556,6 @@ if (file_exists(__DIR__ . '/templates/header.php')) {
     body.product-page .fezamarket-header {
         display: none !important;
     }
-    
-    /* Adjust breadcrumbs to hide on mobile product pages */
-    body.product-page .breadcrumbs {
-        display: none;
-    }
 }
 
 /* Desktop - hide mobile product header */
@@ -579,24 +574,6 @@ if (file_exists(__DIR__ . '/templates/header.php')) {
     margin: 0 auto;
     padding: 20px 24px;
     background: var(--bg-color);
-}
-
-.breadcrumbs {
-    font-size: 13px;
-    color: var(--text-secondary);
-    margin: 10px 0 20px;
-    display: flex;
-    align-items: center;
-    gap: 5px;
-}
-
-.breadcrumbs a {
-    color: var(--primary-color);
-    text-decoration: none;
-}
-
-.breadcrumbs a:hover {
-    text-decoration: underline;
 }
 
 .product-layout {
@@ -813,6 +790,52 @@ if (file_exists(__DIR__ . '/templates/header.php')) {
     color: var(--text-color);
 }
 
+.item-description {
+    max-height: 9em;
+    line-height: 1.5em;
+    overflow: hidden;
+    position: relative;
+    transition: max-height 0.3s ease;
+}
+
+.item-description[aria-expanded="true"] {
+    max-height: none;
+}
+
+.item-description::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 3em;
+    background: linear-gradient(to bottom, transparent, #fff);
+    pointer-events: none;
+    opacity: 1;
+    transition: opacity 0.3s ease;
+}
+
+.item-description[aria-expanded="true"]::after {
+    opacity: 0;
+}
+
+.description-toggle-btn {
+    background: none;
+    border: none;
+    color: var(--primary-color);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 8px 0;
+    margin-top: 8px;
+    text-decoration: underline;
+    transition: color 0.2s ease;
+}
+
+.description-toggle-btn:hover {
+    color: var(--secondary-color);
+}
+
 .reviews-section {
     margin: 32px 0;
     padding: 20px;
@@ -847,9 +870,30 @@ if (file_exists(__DIR__ . '/templates/header.php')) {
 }
 
 .products-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    display: flex;
     gap: 16px;
+    overflow-x: auto;
+    padding-bottom: 12px;
+    scroll-behavior: smooth;
+}
+
+/* Hide scrollbar for Chrome, Safari and Opera */
+.products-grid::-webkit-scrollbar {
+    height: 8px;
+}
+
+.products-grid::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+.products-grid::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 4px;
+}
+
+.products-grid::-webkit-scrollbar-thumb:hover {
+    background: #555;
 }
 
 .product-card {
@@ -861,6 +905,12 @@ if (file_exists(__DIR__ . '/templates/header.php')) {
     transition: box-shadow 0.2s;
     text-decoration: none;
     color: inherit;
+    flex: 0 0 220px;
+    min-width: 220px;
+    max-width: 220px;
+    height: 320px;
+    display: flex;
+    flex-direction: column;
 }
 
 .product-card:hover {
@@ -869,10 +919,63 @@ if (file_exists(__DIR__ . '/templates/header.php')) {
 
 .product-card img {
     width: 100%;
-    height: 150px;
+    height: 180px;
     object-fit: contain;
     border-radius: 4px;
     margin-bottom: 12px;
+    flex-shrink: 0;
+}
+
+.product-card-name {
+    font-size: 14px;
+    line-height: 1.4;
+    margin-bottom: 8px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    flex-grow: 1;
+}
+
+.product-card-price {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-color);
+    margin-top: auto;
+}
+
+/* Responsive design for tablets */
+@media (max-width: 1024px) {
+    .product-card {
+        flex: 0 0 180px;
+        min-width: 180px;
+        max-width: 180px;
+        height: 280px;
+    }
+    
+    .product-card img {
+        height: 140px;
+    }
+}
+
+/* Responsive design for mobile */
+@media (max-width: 768px) {
+    .products-grid {
+        gap: 12px;
+    }
+    
+    .product-card {
+        flex: 0 0 160px;
+        min-width: 160px;
+        max-width: 160px;
+        height: 260px;
+        padding: 12px;
+    }
+    
+    .product-card img {
+        height: 120px;
+    }
 }
 
 .sponsored-product-card:hover {
@@ -1020,20 +1123,6 @@ if (file_exists(__DIR__ . '/templates/header.php')) {
 </div>
 
 <div class="product-container">
-    <!-- Breadcrumbs -->
-    <div class="breadcrumbs">
-        <?php foreach ($breadcrumbs as $i => $bc): ?>
-            <?php if ($bc['url']): ?>
-                <a href="<?= $bc['url']; ?>"><?= h($bc['label']); ?></a>
-            <?php else: ?>
-                <span><?= h($bc['label']); ?></span>
-            <?php endif; ?>
-            <?php if ($i < count($breadcrumbs) - 1): ?>
-                <span> / </span>
-            <?php endif; ?>
-        <?php endforeach; ?>
-    </div>
-
     <!-- Main Product Layout -->
     <div class="product-layout">
         
@@ -1094,9 +1183,12 @@ if (file_exists(__DIR__ . '/templates/header.php')) {
             <?php if (!empty($product['description'])): ?>
             <div class="description-section">
                 <h2>About this item</h2>
-                <div class="item-description">
+                <div class="item-description" id="productDescription" aria-expanded="false">
                     <?= nl2br(h($product['description'])); ?>
                 </div>
+                <button class="description-toggle-btn" id="descriptionToggle" onclick="toggleDescription()" aria-label="Toggle description">
+                    Continue reading
+                </button>
             </div>
             <?php endif; ?>
         </div>
@@ -1204,17 +1296,14 @@ if (file_exists(__DIR__ . '/templates/header.php')) {
         <h2>Similar items</h2>
         <?php if (!empty($relatedProducts)): ?>
         <div class="products-grid">
-            <?php foreach (array_slice($relatedProducts, 0, 6) as $related): ?>
+            <?php foreach (array_slice($relatedProducts, 0, 10) as $related): ?>
             <a href="/product.php?id=<?= $related['id']; ?>" class="product-card">
-                <div style="width: 100%; height: 150px; background: #f8f9fa; border-radius: 4px; overflow: hidden; margin-bottom: 12px; display: flex; align-items: center; justify-content: center;">
-                    <img src="<?= getProductImageUrl($related['image_url'] ?? ''); ?>" 
-                         alt="<?= h($related['name']); ?>"
-                         style="width: 100%; height: 100%; object-fit: contain;">
-                </div>
-                <div style="font-size: 14px; line-height: 1.4; margin-bottom: 8px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">
+                <img src="<?= getProductImageUrl($related['image_url'] ?? ''); ?>" 
+                     alt="<?= h($related['name']); ?>">
+                <div class="product-card-name">
                     <?= h($related['name']); ?>
                 </div>
-                <div style="font-size: 16px; font-weight: 600; color: var(--text-color);">
+                <div class="product-card-price">
                     <?= formatPrice($related['price'] ?? 0); ?>
                 </div>
             </a>
@@ -1294,6 +1383,16 @@ function changeMainImage(imageUrl, index) {
     document.querySelectorAll('.thumbnail').forEach((thumb, i) => {
         thumb.classList.toggle('active', i === index);
     });
+}
+
+// Description toggle functionality
+function toggleDescription() {
+    const description = document.getElementById('productDescription');
+    const toggleBtn = document.getElementById('descriptionToggle');
+    const isExpanded = description.getAttribute('aria-expanded') === 'true';
+    
+    description.setAttribute('aria-expanded', !isExpanded);
+    toggleBtn.textContent = isExpanded ? 'Continue reading' : 'Show less';
 }
 
 // Cart functionality
