@@ -109,6 +109,13 @@ includeHeader($page_title);
                                    value="<?php echo Session::isLoggedIn() ? htmlspecialchars($current_user['first_name'] . ' ' . $current_user['last_name']) : ''; ?>">
                         </div>
                         <div class="form-group">
+                            <label for="senderEmail">Your Email *</label>
+                            <input type="email" id="senderEmail" required class="form-control"
+                                   value="<?php echo Session::isLoggedIn() ? htmlspecialchars($current_user['email']) : ''; ?>">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
                             <label for="deliveryDate">Delivery Date</label>
                             <input type="date" id="deliveryDate" class="form-control" min="<?php echo date('Y-m-d'); ?>">
                             <small>Leave blank to send immediately</small>

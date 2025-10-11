@@ -45,6 +45,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // Log activity
                 Logger::info("User logged in: {$email}");
                 
+                // Send security alert for new device/location
+                if (function_exists('checkAndSendLoginAlert')) {
+                    checkAndSendLoginAlert($result['id'], $result);
+                }
+                
                 // Check if there's an intended action to execute
                 $intendedAction = Session::get('intended_action');
                 $redirectToCart = false;

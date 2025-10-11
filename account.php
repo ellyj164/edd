@@ -1289,7 +1289,7 @@ body {
                 <div class="account-card">
                     <div class="card-header">
                         <h2>Saved Payment Methods</h2>
-                        <p style="color: #666; font-size: 0.9rem; margin-top: 5px;">Cards saved from your purchases</p>
+                        <p style="color: #666; font-size: 0.9rem; margin-top: 5px;">Securely manage your payment methods</p>
                     </div>
                     
                     <?php
@@ -1303,6 +1303,13 @@ body {
                         $paymentMethods = [];
                     }
                     ?>
+                    
+                    <div class="add-payment-method-section" style="margin-bottom: 2rem;">
+                        <button class="btn btn-primary" onclick="showAddPaymentMethodModal()" style="display: inline-flex; align-items: center; gap: 0.5rem;">
+                            <i class="fas fa-plus"></i>
+                            Add New Payment Method
+                        </button>
+                    </div>
                     
                     <?php if (!empty($paymentMethods)): ?>
                         <div class="payment-methods">
@@ -1348,8 +1355,8 @@ body {
                         <div class="empty-state">
                             <div class="empty-icon">💳</div>
                             <h3>No saved payment methods</h3>
-                            <p>When you check "Save this card" at checkout, your payment methods will appear here.</p>
-                            <a href="/checkout.php" class="btn btn-primary">Go to Checkout</a>
+                            <p>Add a payment method now to speed up your future purchases.</p>
+                            <button class="btn btn-primary" onclick="showAddPaymentMethodModal()">Add Payment Method</button>
                         </div>
                     <?php endif; ?>
                     
@@ -2174,6 +2181,11 @@ function showPaymentModal() {
     document.getElementById('paymentModal').style.display = 'block';
     // Set first tab as active
     document.querySelector('.payment-tab').click();
+}
+
+function showAddPaymentMethodModal() {
+    // Alias for showPaymentModal - used in payment methods section
+    showPaymentModal();
 }
 
 function hidePaymentModal() {
