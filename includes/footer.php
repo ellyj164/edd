@@ -251,7 +251,7 @@
             <i class="fas fa-user mobile-bottom-nav-icon"></i>
             <span class="mobile-bottom-nav-label">My Feza</span>
         </a>
-        <a href="/search.php" class="mobile-bottom-nav-item <?php echo basename($_SERVER['PHP_SELF']) === 'search.php' ? 'active' : ''; ?>">
+        <a href="/search.php" class="mobile-bottom-nav-item <?php echo basename($_SERVER['PHP_SELF']) === 'search.php' ? 'active' : ''; ?>" id="mobileBottomNavSearch">
             <i class="fas fa-search mobile-bottom-nav-icon"></i>
             <span class="mobile-bottom-nav-label">Search</span>
         </a>
@@ -436,6 +436,26 @@
                 initMobileBottomNavScroll();
             }, 250);
         });
+        
+        // Handle bottom navigation search click on product pages
+        (function() {
+            const searchNavItem = document.getElementById('mobileBottomNavSearch');
+            if (searchNavItem) {
+                searchNavItem.addEventListener('click', function(e) {
+                    // Check if we're on a product page and if mobile search exists
+                    const isProductPage = document.body.classList.contains('product-page');
+                    const mobileSearchBar = document.getElementById('mobileProductSearch');
+                    
+                    if (isProductPage && mobileSearchBar && typeof toggleMobileSearch === 'function') {
+                        // Prevent default navigation
+                        e.preventDefault();
+                        // Open the mobile search bar
+                        toggleMobileSearch();
+                    }
+                    // Otherwise, let the default href="/search.php" work
+                });
+            }
+        })();
     </script>
     
 </body>

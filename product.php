@@ -499,6 +499,8 @@ if (file_exists(__DIR__ . '/templates/header.php')) {
     
     /* Hide the main desktop header on mobile product pages */
     body.product-page .feza-top-header,
+    body.product-page .feza-main-header,
+    body.product-page .feza-nav-bar,
     body.product-page .fezamarket-header {
         display: none !important;
     }
