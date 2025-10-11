@@ -454,20 +454,12 @@ includeHeader($page_title);
                         <select 
                             id="billing_country" 
                             name="billing_country" 
-                            class="form-input" 
+                            class="form-input country-select" 
                             required
                         >
-                            <option value="US">🇺🇸 United States</option>
-                            <option value="CA">🇨🇦 Canada</option>
-                            <option value="GB">🇬🇧 United Kingdom</option>
-                            <option value="AU">🇦🇺 Australia</option>
-                            <option value="DE">🇩🇪 Germany</option>
-                            <option value="FR">🇫🇷 France</option>
-                            <option value="IT">🇮🇹 Italy</option>
-                            <option value="ES">🇪🇸 Spain</option>
-                            <option value="MX">🇲🇽 Mexico</option>
-                            <option value="JP">🇯🇵 Japan</option>
+                            <option value="">Select country...</option>
                         </select>
+                        <div id="currency-note" class="currency-note"></div>
                     </div>
                 </div>
 
@@ -565,18 +557,9 @@ includeHeader($page_title);
                             <select 
                                 id="shipping_country" 
                                 name="shipping_country" 
-                                class="form-input"
+                                class="form-input country-select"
                             >
-                                <option value="US">🇺🇸 United States</option>
-                                <option value="CA">🇨🇦 Canada</option>
-                                <option value="GB">🇬🇧 United Kingdom</option>
-                                <option value="AU">🇦🇺 Australia</option>
-                                <option value="DE">🇩🇪 Germany</option>
-                                <option value="FR">🇫🇷 France</option>
-                                <option value="IT">🇮🇹 Italy</option>
-                                <option value="ES">🇪🇸 Spain</option>
-                                <option value="MX">🇲🇽 Mexico</option>
-                                <option value="JP">🇯🇵 Japan</option>
+                                <option value="">Select country...</option>
                             </select>
                         </div>
                     </div>
@@ -721,6 +704,58 @@ includeHeader($page_title);
 
 <!-- Stripe.js -->
 <script src="https://js.stripe.com/v3/"></script>
+
+<!-- jQuery (required for Select2) -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+<!-- International Telephone Input -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/intl-tel-input@18.2.1/build/css/intlTelInput.css">
+<script src="https://cdn.jsdelivr.net/npm/intl-tel-input@18.2.1/build/js/intlTelInput.min.js"></script>
+
+<!-- Select2 for searchable country dropdown -->
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+<style>
+/* Currency notification styles */
+.currency-note {
+    background: #e7f3ff;
+    border-left: 4px solid #0066cc;
+    padding: 12px;
+    margin-top: 10px;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    color: #0066cc;
+    display: none;
+}
+
+/* Select2 customization for country dropdown */
+.select2-container--default .select2-selection--single {
+    height: auto !important;
+    padding: 12px !important;
+    border: 1px solid #ddd !important;
+    border-radius: 4px !important;
+    font-size: 1rem !important;
+}
+
+.select2-container--default .select2-selection--single .select2-selection__rendered {
+    padding: 0 !important;
+    line-height: normal !important;
+}
+
+.select2-container--default .select2-selection--single .select2-selection__arrow {
+    height: 100% !important;
+}
+
+.select2-results__option {
+    padding: 10px 15px !important;
+}
+
+.select2-search--dropdown .select2-search__field {
+    padding: 8px !important;
+    border: 1px solid #ddd !important;
+}
+</style>
 
 <!-- Embedded Stripe Elements JavaScript -->
 <script>

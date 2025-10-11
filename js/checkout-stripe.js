@@ -347,6 +347,15 @@
     populateCountrySelect(billingCountrySelect, 'US');
     populateCountrySelect(shippingCountrySelect, 'US');
     
+    // Initialize Select2 for searchable country dropdowns
+    if (typeof jQuery !== 'undefined' && jQuery.fn.select2) {
+        jQuery('.country-select').select2({
+            placeholder: 'Select a country',
+            allowClear: false,
+            width: '100%'
+        });
+    }
+    
     // Listen for country selection changes to update phone code and currency
     if (billingCountrySelect) {
         billingCountrySelect.addEventListener('change', function() {
