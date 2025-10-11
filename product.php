@@ -514,6 +514,10 @@ if (file_exists(__DIR__ . '/templates/header.php')) {
     .mobile-product-header {
         display: none;
     }
+    
+    .mobile-product-search {
+        display: none !important;
+    }
 }
 
 .product-container {
@@ -1476,6 +1480,12 @@ function toggleMobileSearch() {
     const header = document.getElementById('mobileProductHeader');
     const searchInput = document.getElementById('mobileSearchInput');
     
+    // Safety check - ensure elements exist
+    if (!searchBar || !header) {
+        console.warn('Mobile search elements not found');
+        return;
+    }
+    
     if (searchBar.classList.contains('active')) {
         // Hide search bar, show header
         searchBar.classList.remove('active');
@@ -1485,7 +1495,9 @@ function toggleMobileSearch() {
         searchBar.classList.add('active');
         header.style.display = 'none';
         // Focus on search input
-        setTimeout(() => searchInput.focus(), 100);
+        if (searchInput) {
+            setTimeout(() => searchInput.focus(), 100);
+        }
     }
 }
 
