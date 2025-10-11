@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Product Thumbnail Test - Before & After</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        
+        h1 {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        
+        .comparison {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+            margin-bottom: 40px;
+        }
+        
+        .section {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .section h2 {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #333;
+        }
+        
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-left: 10px;
+        }
+        
+        .badge-before {
+            background: #ff6b6b;
+            color: white;
+        }
+        
+        .badge-after {
+            background: #51cf66;
+            color: white;
+        }
+        
+        .product-card {
+            border: 1px solid #e5e5e5;
+            border-radius: 8px;
+            overflow: hidden;
+            background: white;
+        }
+        
+        .product-image-old {
+            position: relative;
+            height: 200px;
+            overflow: hidden;
+            background: #f8f9fa;
+        }
+        
+        .product-image-old img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover; /* OLD: Crops the image */
+        }
+        
+        .product-image-new {
+            position: relative;
+            height: 200px;
+            overflow: hidden;
+            background: #f8f9fa;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .product-image-new img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain; /* NEW: Shows full image */
+            object-position: center;
+            max-width: 100%;
+            max-height: 100%;
+        }
+        
+        .product-details {
+            padding: 15px;
+        }
+        
+        .product-name {
+            font-size: 14px;
+            margin-bottom: 8px;
+            line-height: 1.4;
+        }
+        
+        .product-price {
+            font-size: 18px;
+            font-weight: 600;
+            color: #0654ba;
+        }
+        
+        .notes {
+            background: #fff9e6;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin-top: 20px;
+            border-radius: 4px;
+        }
+        
+        .notes h3 {
+            margin-top: 0;
+            color: #f57c00;
+        }
+        
+        .notes ul {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        
+        .notes li {
+            margin-bottom: 8px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🖼️ Product Thumbnail Rendering - Improvement Test</h1>
+    
+    <div class="comparison">
+        <!-- BEFORE -->
+        <div class="section">
+            <h2>❌ Before <span class="badge badge-before">CROPPED</span></h2>
+            <div class="product-card">
+                <div class="product-image-old">
+                    <img src="https://picsum.photos/400/600" alt="Tall Product">
+                </div>
+                <div class="product-details">
+                    <div class="product-name">Vertical Product Image (400x600)</div>
+                    <div class="product-price">$29.99</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- AFTER -->
+        <div class="section">
+            <h2>✅ After <span class="badge badge-after">FULL IMAGE</span></h2>
+            <div class="product-card">
+                <div class="product-image-new">
+                    <img src="https://picsum.photos/400/600" alt="Tall Product">
+                </div>
+                <div class="product-details">
+                    <div class="product-name">Vertical Product Image (400x600)</div>
+                    <div class="product-price">$29.99</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="comparison">
+        <!-- BEFORE -->
+        <div class="section">
+            <h2>❌ Before <span class="badge badge-before">CROPPED</span></h2>
+            <div class="product-card">
+                <div class="product-image-old">
+                    <img src="https://picsum.photos/600/300" alt="Wide Product">
+                </div>
+                <div class="product-details">
+                    <div class="product-name">Horizontal Product Image (600x300)</div>
+                    <div class="product-price">$49.99</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- AFTER -->
+        <div class="section">
+            <h2>✅ After <span class="badge badge-after">FULL IMAGE</span></h2>
+            <div class="product-card">
+                <div class="product-image-new">
+                    <img src="https://picsum.photos/600/300" alt="Wide Product">
+                </div>
+                <div class="product-details">
+                    <div class="product-name">Horizontal Product Image (600x300)</div>
+                    <div class="product-price">$49.99</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="notes">
+        <h3>📋 Key Improvements</h3>
+        <ul>
+            <li><strong>Full Image Visibility:</strong> Changed from <code>object-fit: cover</code> to <code>object-fit: contain</code></li>
+            <li><strong>No Cropping:</strong> Product images are now fully visible regardless of aspect ratio</li>
+            <li><strong>Centered Display:</strong> Images are centered both horizontally and vertically</li>
+            <li><strong>Consistent Container:</strong> 200px height maintained with background color (#f8f9fa)</li>
+            <li><strong>Responsive:</strong> Works with all image dimensions and aspect ratios</li>
+            <li><strong>No Layout Shift:</strong> Container maintains fixed dimensions preventing page reflow</li>
+        </ul>
+        
+        <h3>🔧 Technical Changes</h3>
+        <ul>
+            <li><strong>index.php:</strong> Updated <code>.product-image-container</code> CSS</li>
+            <li><strong>css/styles.css:</strong> Updated <code>.product-image</code> CSS</li>
+            <li><strong>product.php:</strong> Updated related products image rendering</li>
+        </ul>
+    </div>
+</body>
+</html>

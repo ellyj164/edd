@@ -136,7 +136,7 @@ try {
     // Related products - Try multiple strategies for finding similar items
     // Strategy 1: Find products from same category
     if ($product['category_id']) {
-        $relatedProducts = $productModel->findByCategory($product['category_id'], 8);
+        $relatedProducts = $productModel->findByCategory($product['category_id'], 12);
         // Remove current product from related products
         $relatedProducts = array_filter($relatedProducts, function($p) use ($productId) {
             return $p['id'] != $productId;
@@ -149,8 +149,60 @@ try {
             $productId,
             $product['name'],
             $product['keywords'] ?? '',
-            8
+            12
         );
+    }
+    
+    // Strategy 3: If still empty, get recent products from same vendor
+    if (empty($relatedProducts) && !empty($product['vendor_id'])) {
+        try {
+            $stmt = $db->prepare("
+                SELECT id, name, price, image_url, vendor_id, vendor_name 
+                FROM products 
+                WHERE vendor_id = ? AND id != ? AND status = 'active'
+                ORDER BY created_at DESC
+                LIMIT 12
+            ");
+            $stmt->execute([$product['vendor_id'], $productId]);
+            $relatedProducts = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (Exception $e) {
+            error_log("Vendor products query failed: " . $e->getMessage());
+        }
+    }
+    
+    // Strategy 4: Final fallback - get any recent active products
+    if (empty($relatedProducts)) {
+        try {
+            $stmt = $db->prepare("
+                SELECT id, name, price, image_url, vendor_id, vendor_name 
+                FROM products 
+                WHERE id != ? AND status = 'active'
+                ORDER BY created_at DESC
+                LIMIT 12
+            ");
+            $stmt->execute([$productId]);
+            $relatedProducts = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (Exception $e) {
+            error_log("Fallback products query failed: " . $e->getMessage());
+        }
+    }
+    
+    // Get sponsored/recommended products for sidebar
+    $sponsoredProducts = [];
+    try {
+        // Get products marked as sponsored/featured OR from same category
+        $stmt = $db->prepare("
+            SELECT id, name, price, image_url, vendor_id, vendor_name, is_featured
+            FROM products 
+            WHERE id != ? AND status = 'active'
+            AND (is_featured = 1 OR category_id = ?)
+            ORDER BY is_featured DESC, RAND()
+            LIMIT 8
+        ");
+        $stmt->execute([$productId, $product['category_id'] ?? 0]);
+        $sponsoredProducts = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Exception $e) {
+        error_log("Sponsored products query failed: " . $e->getMessage());
     }
     
     // Check if in user's wishlist and watchlist
@@ -818,9 +870,13 @@ if (file_exists(__DIR__ . '/templates/header.php')) {
 .product-card img {
     width: 100%;
     height: 150px;
-    object-fit: cover;
+    object-fit: contain;
     border-radius: 4px;
     margin-bottom: 12px;
+}
+
+.sponsored-product-card:hover {
+    background-color: #f8f9fa;
 }
 
 .modal {
@@ -1071,6 +1127,41 @@ if (file_exists(__DIR__ . '/templates/header.php')) {
                 Currently unavailable
             </div>
             <?php endif; ?>
+            
+            <!-- Sponsored/Recommended Products in Sidebar -->
+            <?php if (!empty($sponsoredProducts)): ?>
+            <div class="sponsored-section" style="margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--border-color);">
+                <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 16px; color: var(--text-color);">
+                    Sponsored items
+                </h3>
+                <div style="display: flex; flex-direction: column; gap: 16px;">
+                    <?php foreach (array_slice($sponsoredProducts, 0, 4) as $sponsored): ?>
+                    <a href="/product.php?id=<?= $sponsored['id']; ?>" 
+                       class="sponsored-product-card" 
+                       style="display: flex; gap: 12px; text-decoration: none; color: inherit; padding: 8px; border-radius: 4px; transition: background-color 0.2s;">
+                        <div style="flex: 0 0 80px; height: 80px; background: #f8f9fa; border-radius: 4px; overflow: hidden; display: flex; align-items: center; justify-content: center;">
+                            <img src="<?= getProductImageUrl($sponsored['image_url'] ?? ''); ?>" 
+                                 alt="<?= h($sponsored['name']); ?>"
+                                 style="width: 100%; height: 100%; object-fit: contain;">
+                        </div>
+                        <div style="flex: 1; min-width: 0;">
+                            <div style="font-size: 13px; line-height: 1.4; margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">
+                                <?= h($sponsored['name']); ?>
+                            </div>
+                            <div style="font-size: 15px; font-weight: 600; color: var(--text-color);">
+                                <?= formatPrice($sponsored['price']); ?>
+                            </div>
+                            <?php if (!empty($sponsored['is_featured'])): ?>
+                            <div style="font-size: 11px; color: #0654ba; margin-top: 4px;">
+                                ⭐ Featured
+                            </div>
+                            <?php endif; ?>
+                        </div>
+                    </a>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+            <?php endif; ?>
         </div>
     </div>
     
@@ -1109,28 +1200,37 @@ if (file_exists(__DIR__ . '/templates/header.php')) {
     </div>
     
     <!-- Related Products -->
-    <?php if (!empty($relatedProducts)): ?>
     <div class="related-products">
         <h2>Similar items</h2>
+        <?php if (!empty($relatedProducts)): ?>
         <div class="products-grid">
             <?php foreach (array_slice($relatedProducts, 0, 6) as $related): ?>
-            <a href="/product/<?= $related['id']; ?>" class="product-card">
-                <img src="<?= getProductImageUrl($related['image_url'] ?? ''); ?>" alt="<?= h($related['name']); ?>">
-                <div><?= h($related['name']); ?></div>
-                <div><?= formatPrice($related['price'] ?? 0); ?></div>
+            <a href="/product.php?id=<?= $related['id']; ?>" class="product-card">
+                <div style="width: 100%; height: 150px; background: #f8f9fa; border-radius: 4px; overflow: hidden; margin-bottom: 12px; display: flex; align-items: center; justify-content: center;">
+                    <img src="<?= getProductImageUrl($related['image_url'] ?? ''); ?>" 
+                         alt="<?= h($related['name']); ?>"
+                         style="width: 100%; height: 100%; object-fit: contain;">
+                </div>
+                <div style="font-size: 14px; line-height: 1.4; margin-bottom: 8px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">
+                    <?= h($related['name']); ?>
+                </div>
+                <div style="font-size: 16px; font-weight: 600; color: var(--text-color);">
+                    <?= formatPrice($related['price'] ?? 0); ?>
+                </div>
             </a>
             <?php endforeach; ?>
         </div>
-    </div>
-    <?php elseif (isset($product['category_id']) && $product['category_id']): ?>
-    <div class="related-products">
-        <h2>Similar items</h2>
+        <?php else: ?>
         <div class="text-center py-5 text-muted">
-            <p>No similar products found</p>
-            <a href="/category.php?cat=<?= $product['category_id']; ?>" class="btn btn-primary">Browse Category</a>
+            <p>No similar products available at the moment</p>
+            <?php if (isset($product['category_id']) && $product['category_id']): ?>
+                <a href="/category.php?cat=<?= $product['category_id']; ?>" class="btn btn-primary" style="margin-top: 16px;">Browse Category</a>
+            <?php else: ?>
+                <a href="/products.php" class="btn btn-primary" style="margin-top: 16px;">Browse All Products</a>
+            <?php endif; ?>
         </div>
+        <?php endif; ?>
     </div>
-    <?php endif; ?>
 </div>
 
 <!-- Offer Modal -->

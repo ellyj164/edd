@@ -846,7 +846,7 @@ includeHeader($page_title);
                         <div class="walmart-product-card">
                             <div class="product-image-container">
                                 <a href="/product.php?id=<?= (int)$product['id'] ?>" aria-label="View <?php echo h($product['title']); ?>">
-                                    <img src="<?php echo h($product['image']); ?>" alt="<?php echo h($product['title']); ?>" style="object-fit: cover;">
+                                    <img src="<?php echo h($product['image']); ?>" alt="<?php echo h($product['title']); ?>" loading="lazy">
                                 </a>
                                 <button class="wishlist-heart" onclick="toggleWishlist(<?php echo $product['id']; ?>)">♡</button>
                             </div>
@@ -1012,7 +1012,7 @@ includeHeader($page_title);
                         <div class="walmart-product-card">
                             <div class="product-image-container">
                                 <a href="/product.php?id=<?= (int)$product['id'] ?>" aria-label="View <?php echo h($product['title']); ?>">
-                                    <img src="<?php echo h($product['image']); ?>" alt="<?php echo h($product['title']); ?>" style="object-fit: cover;">
+                                    <img src="<?php echo h($product['image']); ?>" alt="<?php echo h($product['title']); ?>" loading="lazy">
                                 </a>
                                 <button class="wishlist-heart" onclick="toggleWishlist(<?php echo $product['id']; ?>)">♡</button>
                                 <?php if ($index < 2): ?>
@@ -1782,7 +1782,7 @@ body {
 .tech-image-small img,
 .assembly-hero-image,
 .pg-model {
-    object-fit: cover !important;
+    object-fit: contain !important;
     width: 100%;
     height: 100%;
 }
@@ -2480,12 +2480,19 @@ body {
     position: relative;
     height: 200px;
     overflow: hidden;
+    background: #f8f9fa;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .product-image-container img {
     width: 100%;
     height: 100%;
-    object-fit: cover;
+    object-fit: contain;
+    object-position: center;
+    max-width: 100%;
+    max-height: 100%;
 }
 
 .wishlist-heart {
