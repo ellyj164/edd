@@ -190,17 +190,36 @@ try {
     // Get sponsored/recommended products for sidebar
     $sponsoredProducts = [];
     try {
-        // Get products marked as sponsored/featured OR from same category
+        // Get products with active sponsorships OR featured products from same category
         $stmt = $db->prepare("
-            SELECT id, name, price, image_url, vendor_id, vendor_name, is_featured
-            FROM products 
-            WHERE id != ? AND status = 'active'
-            AND (is_featured = 1 OR category_id = ?)
-            ORDER BY is_featured DESC, RAND()
+            SELECT DISTINCT p.id, p.name, p.price, p.image_url, p.vendor_id, p.vendor_name, 
+                   p.is_featured,
+                   sp.id as sponsored_id,
+                   CASE WHEN sp.id IS NOT NULL THEN 1 ELSE 0 END as is_sponsored
+            FROM products p
+            LEFT JOIN sponsored_products sp ON p.id = sp.product_id 
+                AND sp.status = 'active' 
+                AND sp.sponsored_until > NOW()
+            WHERE p.id != ? AND p.status = 'active'
+            AND (sp.id IS NOT NULL OR p.is_featured = 1 OR p.category_id = ?)
+            ORDER BY is_sponsored DESC, p.is_featured DESC, RAND()
             LIMIT 8
         ");
         $stmt->execute([$productId, $product['category_id'] ?? 0]);
         $sponsoredProducts = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        // Track impressions for sponsored products
+        if (!empty($sponsoredProducts)) {
+            $sponsoredIds = array_filter(array_column($sponsoredProducts, 'sponsored_id'));
+            if (!empty($sponsoredIds)) {
+                $updateImpressions = "
+                    UPDATE sponsored_products 
+                    SET impressions = impressions + 1 
+                    WHERE id IN (" . implode(',', array_map('intval', $sponsoredIds)) . ")
+                ";
+                $db->exec($updateImpressions);
+            }
+        }
     } catch (Exception $e) {
         error_log("Sponsored products query failed: " . $e->getMessage());
     }
@@ -1230,7 +1249,7 @@ if (file_exists(__DIR__ . '/templates/header.php')) {
                     <?php foreach (array_slice($sponsoredProducts, 0, 4) as $sponsored): ?>
                     <a href="/product.php?id=<?= $sponsored['id']; ?>" 
                        class="sponsored-product-card" 
-                       style="display: flex; gap: 12px; text-decoration: none; color: inherit; padding: 8px; border-radius: 4px; transition: background-color 0.2s;">
+                       style="display: flex; gap: 12px; text-decoration: none; color: inherit; padding: 8px; border-radius: 4px; transition: background-color 0.2s; position: relative;">
                         <div style="flex: 0 0 80px; height: 80px; background: #f8f9fa; border-radius: 4px; overflow: hidden; display: flex; align-items: center; justify-content: center;">
                             <img src="<?= getProductImageUrl($sponsored['image_url'] ?? ''); ?>" 
                                  alt="<?= h($sponsored['name']); ?>"
@@ -1243,11 +1262,18 @@ if (file_exists(__DIR__ . '/templates/header.php')) {
                             <div style="font-size: 15px; font-weight: 600; color: var(--text-color);">
                                 <?= formatPrice($sponsored['price']); ?>
                             </div>
-                            <?php if (!empty($sponsored['is_featured'])): ?>
-                            <div style="font-size: 11px; color: #0654ba; margin-top: 4px;">
-                                ⭐ Featured
+                            <div style="display: flex; gap: 8px; margin-top: 4px;">
+                                <?php if (!empty($sponsored['is_sponsored'])): ?>
+                                <div style="font-size: 10px; background: #3b82f6; color: white; padding: 2px 8px; border-radius: 12px; font-weight: 600;">
+                                    SPONSORED
+                                </div>
+                                <?php endif; ?>
+                                <?php if (!empty($sponsored['is_featured'])): ?>
+                                <div style="font-size: 11px; color: #0654ba;">
+                                    ⭐ Featured
+                                </div>
+                                <?php endif; ?>
                             </div>
-                            <?php endif; ?>
                         </div>
                     </a>
                     <?php endforeach; ?>
