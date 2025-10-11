@@ -116,6 +116,68 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 
                 Session::setFlash('success', 'Successfully joined the campaign with selected products!');
                 break;
+                
+            case 'create_sponsored_ad':
+                $productIds = $_POST['product_ids'] ?? [];
+                
+                if (empty($productIds)) {
+                    throw new Exception('Please select at least one product to sponsor.');
+                }
+                
+                // Get pricing from settings
+                $settingsQuery = "SELECT setting_value FROM sponsored_product_settings WHERE setting_key = 'price_per_7_days'";
+                $settingsStmt = $db->prepare($settingsQuery);
+                $settingsStmt->execute();
+                $pricePerProduct = (float)($settingsStmt->fetchColumn() ?: 50.00);
+                
+                $totalCost = count($productIds) * $pricePerProduct;
+                
+                // Check seller's wallet balance
+                $walletQuery = "SELECT balance FROM wallets WHERE user_id = ? AND currency = 'USD'";
+                $walletStmt = $db->prepare($walletQuery);
+                $walletStmt->execute([Session::getUserId()]);
+                $wallet = $walletStmt->fetch();
+                
+                if (!$wallet || $wallet['balance'] < $totalCost) {
+                    throw new Exception('Insufficient wallet balance. You need $' . number_format($totalCost, 2) . ' to sponsor ' . count($productIds) . ' product(s).');
+                }
+                
+                // Deduct from wallet
+                $deductQuery = "UPDATE wallets SET balance = balance - ? WHERE user_id = ? AND currency = 'USD'";
+                $deductStmt = $db->prepare($deductQuery);
+                $deductStmt->execute([$totalCost, Session::getUserId()]);
+                
+                // Record wallet transaction
+                $transactionQuery = "
+                    INSERT INTO wallet_transactions 
+                    (wallet_id, amount, type, description, status, created_at)
+                    SELECT id, ?, 'debit', ?, 'completed', NOW()
+                    FROM wallets WHERE user_id = ? AND currency = 'USD'
+                ";
+                $transactionStmt = $db->prepare($transactionQuery);
+                $transactionDescription = 'Sponsored product ad for ' . count($productIds) . ' product(s) - 7 days';
+                $transactionStmt->execute([$totalCost, $transactionDescription, Session::getUserId()]);
+                
+                // Create sponsored ads
+                $sponsoredFrom = date('Y-m-d H:i:s');
+                $sponsoredUntil = date('Y-m-d H:i:s', strtotime('+7 days'));
+                
+                foreach ($productIds as $productId) {
+                    $insertQuery = "
+                        INSERT INTO sponsored_products 
+                        (product_id, vendor_id, seller_id, cost, payment_method, payment_status, 
+                         status, sponsored_from, sponsored_until, created_at)
+                        VALUES (?, ?, ?, ?, 'wallet', 'paid', 'pending', ?, ?, NOW())
+                    ";
+                    $insertStmt = $db->prepare($insertQuery);
+                    $insertStmt->execute([
+                        $productId, $vendorId, Session::getUserId(), 
+                        $pricePerProduct, $sponsoredFrom, $sponsoredUntil
+                    ]);
+                }
+                
+                Session::setFlash('success', 'Successfully created sponsored ads for ' . count($productIds) . ' product(s)! Total cost: $' . number_format($totalCost, 2) . '. Pending admin approval.');
+                break;
         }
         
     } catch (Exception $e) {
@@ -166,6 +228,32 @@ $productsQuery = "
 $productsStmt = $db->prepare($productsQuery);
 $productsStmt->execute([$vendorId]);
 $products = $productsStmt->fetchAll();
+
+// Get seller's sponsored ads
+$sponsoredAdsQuery = "
+    SELECT sp.*, p.name as product_name, p.image_url as product_image
+    FROM sponsored_products sp
+    INNER JOIN products p ON sp.product_id = p.id
+    WHERE sp.seller_id = ?
+    ORDER BY sp.created_at DESC
+";
+$sponsoredAdsStmt = $db->prepare($sponsoredAdsQuery);
+$sponsoredAdsStmt->execute([Session::getUserId()]);
+$sponsoredAds = $sponsoredAdsStmt->fetchAll();
+
+// Get active and expired counts
+$activeAds = array_filter($sponsoredAds, function($ad) {
+    return $ad['status'] === 'active' && strtotime($ad['sponsored_until']) > time();
+});
+$expiredAds = array_filter($sponsoredAds, function($ad) {
+    return $ad['status'] === 'expired' || ($ad['status'] === 'active' && strtotime($ad['sponsored_until']) <= time());
+});
+
+// Get sponsored ad pricing
+$pricingQuery = "SELECT setting_value FROM sponsored_product_settings WHERE setting_key = 'price_per_7_days'";
+$pricingStmt = $db->prepare($pricingQuery);
+$pricingStmt->execute();
+$adPricePerProduct = (float)($pricingStmt->fetchColumn() ?: 50.00);
 
 // Get marketing statistics
 $statsQuery = "
@@ -339,6 +427,114 @@ includeHeader($page_title);
                         <p>Create your first coupon to attract customers and boost sales.</p>
                         <button class="btn btn-primary" onclick="showCouponModal()">
                             Create Your First Coupon
+                        </button>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </div>
+
+        <!-- Sponsored Ads Section -->
+        <div class="marketing-widget sponsored-ads-widget">
+            <div class="widget-header">
+                <h3>Sponsored Product Ads</h3>
+                <button class="btn btn-sm btn-primary" onclick="showSponsoredAdModal()">
+                    📢 Create Ad
+                </button>
+            </div>
+            <div class="widget-content">
+                <div class="ad-pricing-info" style="background: #f0f9ff; padding: 12px; border-radius: 6px; margin-bottom: 20px; border-left: 4px solid #3b82f6;">
+                    <strong>💰 Pricing:</strong> $<?php echo number_format($adPricePerProduct, 2); ?> per product for 7 days
+                    <span style="color: #64748b; font-size: 0.9em; display: block; margin-top: 4px;">
+                        Your sponsored products will be displayed prominently to increase visibility and sales.
+                    </span>
+                </div>
+                
+                <?php if (!empty($sponsoredAds)): ?>
+                    <div class="sponsored-tabs">
+                        <button class="tab-btn active" onclick="switchSponsoredTab('all')">
+                            All (<?php echo count($sponsoredAds); ?>)
+                        </button>
+                        <button class="tab-btn" onclick="switchSponsoredTab('active')">
+                            Active (<?php echo count($activeAds); ?>)
+                        </button>
+                        <button class="tab-btn" onclick="switchSponsoredTab('expired')">
+                            Expired (<?php echo count($expiredAds); ?>)
+                        </button>
+                    </div>
+                    
+                    <div class="sponsored-ads-list" id="allAds">
+                        <?php foreach ($sponsoredAds as $ad): ?>
+                            <?php 
+                                $isActive = $ad['status'] === 'active' && strtotime($ad['sponsored_until']) > time();
+                                $isExpired = $ad['status'] === 'expired' || ($ad['status'] === 'active' && strtotime($ad['sponsored_until']) <= time());
+                                $daysRemaining = $isActive ? ceil((strtotime($ad['sponsored_until']) - time()) / 86400) : 0;
+                            ?>
+                            <div class="sponsored-ad-card" data-status="<?php echo $isActive ? 'active' : ($isExpired ? 'expired' : $ad['status']); ?>">
+                                <div class="ad-product-info">
+                                    <?php if ($ad['product_image']): ?>
+                                        <img src="<?php echo htmlspecialchars($ad['product_image']); ?>" 
+                                             alt="<?php echo htmlspecialchars($ad['product_name']); ?>" 
+                                             style="width: 60px; height: 60px; object-fit: cover; border-radius: 6px;">
+                                    <?php endif; ?>
+                                    <div>
+                                        <div class="ad-product-name"><?php echo htmlspecialchars($ad['product_name']); ?></div>
+                                        <div class="ad-cost">Cost: $<?php echo number_format($ad['cost'], 2); ?></div>
+                                    </div>
+                                </div>
+                                
+                                <div class="ad-status-info">
+                                    <span class="status-badge status-<?php echo strtolower($ad['status']); ?>">
+                                        <?php echo ucfirst($ad['status']); ?>
+                                    </span>
+                                    <?php if ($ad['payment_status'] !== 'paid'): ?>
+                                        <span class="payment-badge payment-<?php echo $ad['payment_status']; ?>">
+                                            Payment: <?php echo ucfirst($ad['payment_status']); ?>
+                                        </span>
+                                    <?php endif; ?>
+                                </div>
+                                
+                                <div class="ad-dates">
+                                    <div class="ad-date-item">
+                                        <span class="label">Started:</span>
+                                        <span class="value"><?php echo formatDate($ad['sponsored_from']); ?></span>
+                                    </div>
+                                    <div class="ad-date-item">
+                                        <span class="label">Expires:</span>
+                                        <span class="value"><?php echo formatDate($ad['sponsored_until']); ?></span>
+                                    </div>
+                                    <?php if ($isActive && $daysRemaining > 0): ?>
+                                        <div class="ad-remaining">
+                                            <span class="days-remaining"><?php echo $daysRemaining; ?> day(s) remaining</span>
+                                        </div>
+                                    <?php endif; ?>
+                                </div>
+                                
+                                <div class="ad-performance">
+                                    <div class="performance-metric">
+                                        <span class="metric-label">Impressions</span>
+                                        <span class="metric-value"><?php echo number_format($ad['impressions']); ?></span>
+                                    </div>
+                                    <div class="performance-metric">
+                                        <span class="metric-label">Clicks</span>
+                                        <span class="metric-value"><?php echo number_format($ad['clicks']); ?></span>
+                                    </div>
+                                    <?php if ($ad['impressions'] > 0): ?>
+                                        <div class="performance-metric">
+                                            <span class="metric-label">CTR</span>
+                                            <span class="metric-value"><?php echo number_format(($ad['clicks'] / $ad['impressions']) * 100, 2); ?>%</span>
+                                        </div>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                <?php else: ?>
+                    <div class="empty-state">
+                        <div class="empty-icon">📢</div>
+                        <h3>No sponsored ads yet</h3>
+                        <p>Boost your product visibility with sponsored ads. Get featured placement for 7 days!</p>
+                        <button class="btn btn-primary" onclick="showSponsoredAdModal()">
+                            Create Your First Ad
                         </button>
                     </div>
                 <?php endif; ?>
@@ -577,6 +773,72 @@ includeHeader($page_title);
                 <div class="form-actions">
                     <button type="button" class="btn btn-ghost" onclick="closeJoinCampaignModal()">Cancel</button>
                     <button type="submit" class="btn btn-primary">Join Campaign</button>
+                </div>
+            <?php endif; ?>
+        </form>
+    </div>
+</div>
+
+<!-- Create Sponsored Ad Modal -->
+<div class="modal-overlay" id="sponsoredAdModal" style="display: none;">
+    <div class="modal">
+        <div class="modal-header">
+            <h3>Create Sponsored Ad</h3>
+            <button class="modal-close" onclick="closeSponsoredAdModal()">✕</button>
+        </div>
+        <form method="POST" class="modal-content" id="sponsoredAdForm">
+            <input type="hidden" name="action" value="create_sponsored_ad">
+            <?php echo csrfTokenInput(); ?>
+            
+            <div class="ad-info-box" style="background: #f0f9ff; padding: 16px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #3b82f6;">
+                <h4 style="margin: 0 0 8px 0; color: #1e40af;">📢 Sponsored Ad Benefits</h4>
+                <ul style="margin: 0; padding-left: 20px; color: #1e3a8a;">
+                    <li>Featured placement above "Similar Items" on product pages</li>
+                    <li>7-day sponsorship period per product</li>
+                    <li>Increased visibility and click-through rates</li>
+                    <li>Price: <strong>$<?php echo number_format($adPricePerProduct, 2); ?> per product</strong></li>
+                </ul>
+            </div>
+            
+            <div class="campaign-info">
+                <p><strong>Select products to sponsor:</strong></p>
+                <div class="selected-count" id="selectedCount" style="margin-bottom: 10px; color: #64748b;">
+                    0 products selected | Total: $0.00
+                </div>
+            </div>
+            
+            <div class="products-selection" style="max-height: 400px; overflow-y: auto;">
+                <?php if (!empty($products)): ?>
+                    <?php foreach ($products as $product): ?>
+                        <label class="product-checkbox">
+                            <input type="checkbox" name="product_ids[]" value="<?php echo $product['id']; ?>" 
+                                   data-price="<?php echo $adPricePerProduct; ?>"
+                                   onchange="updateSponsoredAdTotal()">
+                            <div class="product-info">
+                                <div class="product-name"><?php echo htmlspecialchars($product['name']); ?></div>
+                                <div class="product-details">
+                                    Price: $<?php echo number_format($product['price'], 2); ?> | 
+                                    Stock: <?php echo $product['stock_quantity']; ?>
+                                </div>
+                            </div>
+                        </label>
+                    <?php endforeach; ?>
+                <?php else: ?>
+                    <div class="no-products">
+                        <p>You need active products to create sponsored ads.</p>
+                        <a href="/seller/products/add.php" class="btn btn-primary">Add Products</a>
+                    </div>
+                <?php endif; ?>
+            </div>
+            
+            <?php if (!empty($products)): ?>
+                <div class="wallet-info" style="background: #fef3c7; padding: 12px; border-radius: 6px; margin-top: 16px; border-left: 4px solid #f59e0b;">
+                    <strong>💳 Payment:</strong> Cost will be deducted from your wallet balance.
+                </div>
+                
+                <div class="form-actions">
+                    <button type="button" class="btn btn-ghost" onclick="closeSponsoredAdModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="createAdBtn" disabled>Create Sponsored Ads</button>
                 </div>
             <?php endif; ?>
         </form>
@@ -1075,6 +1337,198 @@ includeHeader($page_title);
         flex-direction: column;
     }
 }
+
+/* Sponsored Ads Styles */
+.sponsored-ads-widget {
+    width: 100%;
+}
+
+.ad-pricing-info {
+    font-size: 14px;
+}
+
+.sponsored-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.tab-btn {
+    padding: 12px 20px;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: #6b7280;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.tab-btn.active {
+    color: #3b82f6;
+    border-bottom-color: #3b82f6;
+}
+
+.tab-btn:hover {
+    color: #3b82f6;
+}
+
+.sponsored-ads-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.sponsored-ad-card {
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.ad-product-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.ad-product-name {
+    font-weight: 600;
+    color: #1f2937;
+    margin-bottom: 4px;
+}
+
+.ad-cost {
+    font-size: 14px;
+    color: #6b7280;
+}
+
+.ad-status-info {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.payment-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.payment-pending {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.payment-paid {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.payment-failed {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.ad-dates {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+    padding: 12px;
+    background: #f9fafb;
+    border-radius: 6px;
+}
+
+.ad-date-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.ad-date-item .label {
+    font-size: 12px;
+    color: #6b7280;
+    font-weight: 600;
+}
+
+.ad-date-item .value {
+    font-size: 14px;
+    color: #1f2937;
+}
+
+.ad-remaining {
+    display: flex;
+    align-items: center;
+}
+
+.days-remaining {
+    background: #dbeafe;
+    color: #1e40af;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.ad-performance {
+    display: flex;
+    gap: 24px;
+    padding: 12px;
+    background: #f9fafb;
+    border-radius: 6px;
+}
+
+.performance-metric {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.metric-label {
+    font-size: 12px;
+    color: #6b7280;
+    font-weight: 600;
+}
+
+.metric-value {
+    font-size: 16px;
+    color: #1f2937;
+    font-weight: 700;
+}
+
+.status-pending {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.status-active {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.status-expired {
+    background: #f3f4f6;
+    color: #6b7280;
+}
+
+.status-rejected {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+@media (max-width: 768px) {
+    .ad-dates,
+    .ad-performance {
+        grid-template-columns: 1fr;
+        flex-direction: column;
+    }
+}
 </style>
 
 <script>
@@ -1194,6 +1648,63 @@ document.addEventListener('click', function(e) {
         e.target.style.display = 'none';
     }
 });
+
+// Sponsored Ad modal functions
+function showSponsoredAdModal() {
+    document.getElementById('sponsoredAdModal').style.display = 'flex';
+}
+
+function closeSponsoredAdModal() {
+    document.getElementById('sponsoredAdModal').style.display = 'none';
+    document.getElementById('sponsoredAdForm').reset();
+    updateSponsoredAdTotal();
+}
+
+function updateSponsoredAdTotal() {
+    const checkboxes = document.querySelectorAll('#sponsoredAdForm input[name="product_ids[]"]:checked');
+    const count = checkboxes.length;
+    const pricePerProduct = <?php echo $adPricePerProduct; ?>;
+    const total = count * pricePerProduct;
+    
+    const selectedCountEl = document.getElementById('selectedCount');
+    if (selectedCountEl) {
+        selectedCountEl.textContent = `${count} product${count !== 1 ? 's' : ''} selected | Total: $${total.toFixed(2)}`;
+    }
+    
+    const createBtn = document.getElementById('createAdBtn');
+    if (createBtn) {
+        createBtn.disabled = count === 0;
+        if (count > 0) {
+            createBtn.textContent = `Create Sponsored Ads ($${total.toFixed(2)})`;
+        } else {
+            createBtn.textContent = 'Create Sponsored Ads';
+        }
+    }
+}
+
+// Sponsored tab switching
+function switchSponsoredTab(tab) {
+    // Update tab buttons
+    document.querySelectorAll('.sponsored-tabs .tab-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    event.target.classList.add('active');
+    
+    // Filter ads
+    const ads = document.querySelectorAll('.sponsored-ad-card');
+    ads.forEach(ad => {
+        const status = ad.getAttribute('data-status');
+        if (tab === 'all') {
+            ad.style.display = 'flex';
+        } else if (tab === 'active' && status === 'active') {
+            ad.style.display = 'flex';
+        } else if (tab === 'expired' && status === 'expired') {
+            ad.style.display = 'flex';
+        } else {
+            ad.style.display = 'none';
+        }
+    });
+}
 
 // Close modals with escape key
 document.addEventListener('keydown', function(e) {
