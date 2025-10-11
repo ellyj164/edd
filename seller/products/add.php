@@ -69,7 +69,7 @@ $form = [
     'category_id' => '', 'brand_id' => '', 'tags' => '',
 
     // Digital Product
-    'is_digital' => 0, 'digital_delivery_info' => '', 'download_limit' => '', 'expiry_days' => '',
+    'is_digital' => 0, 'digital_delivery_info' => '', 'download_limit' => '', 'expiry_days' => '', 'digital_url' => '', 'digital_delivery_method' => 'file',
 
     // Shipping
     'weight' => '', 'length' => '', 'width' => '', 'height' => '',

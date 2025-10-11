@@ -124,7 +124,16 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
     if($form['compare_price']!=='' && !is_numeric($form['compare_price'])){ $errors['compare_price']='Compare price must be a valid number.'; }
     if($form['stock_quantity']!=='' && !is_numeric($form['stock_quantity'])){ $errors['stock_quantity']='Stock quantity must be numeric.'; }
     if($form['category_id']!=='' && !ctype_digit((string)$form['category_id'])){ $errors['category_id']='Invalid category.'; }
-    if($form['brand_id']!=='' && !ctype_digit((string)$form['brand_id'])){ $errors['brand_id']='Invalid brand.'; }
+    
+    // Handle "other" brand option
+    if ($form['brand_id'] === 'other') {
+        $newBrandName = trim($_POST['new_brand_name'] ?? '');
+        if (empty($newBrandName)) {
+            $errors['brand_id'] = 'Please enter a brand name.';
+        }
+    } elseif($form['brand_id']!=='' && !ctype_digit((string)$form['brand_id'])){ 
+        $errors['brand_id']='Invalid brand.'; 
+    }
 
     if(!$errors){
       $now=date('Y-m-d H:i:s');
@@ -134,7 +143,35 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
       $price=toNumericOrNull($form['price']); $compare_price=toNumericOrNull($form['compare_price']); $cost_price=toNumericOrNull($form['cost_price']);
       $sale_price=toNumericOrNull($form['sale_price']); $sale_start_date=toNullIfEmpty($form['sale_start_date']); $sale_end_date=toNullIfEmpty($form['sale_end_date']);
       $stock_quantity=(int)(toNumericOrNull($form['stock_quantity'])??0); $low_stock=(int)(toNumericOrNull($form['low_stock_threshold'])??5);
-      $category_id=toNullIfEmpty($form['category_id']); $brand_id=toNullIfEmpty($form['brand_id']); $tags=trim((string)$form['tags']);
+      
+      $category_id=toNullIfEmpty($form['category_id']); 
+      
+      // Handle brand creation if "other" was selected
+      $brand_id=toNullIfEmpty($form['brand_id']);
+      if ($brand_id === 'other') {
+          $newBrandName = trim($_POST['new_brand_name'] ?? '');
+          if (!empty($newBrandName)) {
+              // Create slug for brand
+              $brandSlug = slugify($newBrandName);
+              
+              // Check if brand already exists
+              $existingBrand = Database::query("SELECT id FROM brands WHERE slug = ?", [$brandSlug])->fetch();
+              if ($existingBrand) {
+                  $brand_id = $existingBrand['id'];
+              } else {
+                  // Create new brand
+                  Database::query(
+                      "INSERT INTO brands (name, slug, description, is_active, created_at, updated_at) VALUES (?, ?, ?, 1, NOW(), NOW())",
+                      [$newBrandName, $brandSlug, "Added by seller"]
+                  );
+                  $brand_id = Database::lastInsertId();
+              }
+          } else {
+              $brand_id = null;
+          }
+      }
+      
+      $tags=trim((string)$form['tags']);
       $track_inventory=toBool($form['track_inventory']??0); $allow_backorder=toBool($form['allow_backorder']??0); $backorder_limit=toNumericOrNull($form['backorder_limit']);
       $weight=toNumericOrNull($form['weight']); $length=toNumericOrNull($form['length']); $width=toNumericOrNull($form['width']); $height=toNumericOrNull($form['height']);
       $free_shipping=toBool($form['free_shipping']??0); $shipping_class=trim((string)$form['shipping_class']); $handling_time=(string)($form['handling_time']??'1');
@@ -361,13 +398,21 @@ includeHeader($page_title);
         </div>
         <div class="col-md-4">
           <label class="form-label">Brand</label>
-          <select name="brand_id" class="form-select <?= isset($errors['brand_id'])?'is-invalid':''; ?>">
+          <select name="brand_id" id="brand_id_edit" class="form-select <?= isset($errors['brand_id'])?'is-invalid':''; ?>" onchange="toggleOtherBrandFieldEdit(this.value)">
             <option value="">-- Select --</option>
             <?php foreach ($brands as $b): ?>
               <option value="<?= (int)$b['id'] ?>" <?= ($form['brand_id']==$b['id']?'selected':'') ?>><?= h($b['name']) ?></option>
             <?php endforeach; ?>
+            <option value="other">Other (Enter new brand)</option>
           </select>
           <?php if (isset($errors['brand_id'])): ?><div class="invalid-feedback"><?= h($errors['brand_id']) ?></div><?php endif; ?>
+          
+          <!-- New brand input field (hidden by default) -->
+          <div id="new_brand_field_edit" style="display: none; margin-top: 10px;">
+              <label class="form-label">New Brand Name</label>
+              <input type="text" name="new_brand_name" id="new_brand_name_edit" class="form-control" placeholder="Enter brand name">
+              <small class="form-text text-muted">This will create a new brand in the system</small>
+          </div>
         </div>
         <div class="col-12">
           <label class="form-label">Short Description</label>
@@ -630,4 +675,27 @@ includeHeader($page_title);
   });}
 })();
 </script>
+
+<!-- Brand "Other" option toggle for edit page -->
+<script>
+function toggleOtherBrandFieldEdit(value) {
+    const newBrandField = document.getElementById('new_brand_field_edit');
+    if (value === 'other') {
+        newBrandField.style.display = 'block';
+        document.getElementById('new_brand_name_edit').setAttribute('required', 'required');
+    } else {
+        newBrandField.style.display = 'none';
+        document.getElementById('new_brand_name_edit').removeAttribute('required');
+    }
+}
+
+// Check on page load
+document.addEventListener('DOMContentLoaded', function() {
+    const brandSelect = document.getElementById('brand_id_edit');
+    if (brandSelect && brandSelect.value === 'other') {
+        toggleOtherBrandFieldEdit('other');
+    }
+});
+</script>
+
 <?php includeFooter(); ?>
