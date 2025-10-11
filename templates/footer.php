@@ -454,59 +454,45 @@
 
     <script>
         // Mobile bottom navigation scroll behavior - only on mobile devices
-        function initMobileBottomNavScroll() {
-            // Check if mobile
+        let lastBottomNavScrollTop = 0;
+        let bottomNavScrollThreshold = 5; // Minimum scroll distance to trigger
+        let bottomNavTicking = false;
+        
+        function handleBottomNavScroll() {
+            // Check if mobile - if not, skip
             if (window.innerWidth > 768) return;
             
-            let lastBottomNavScrollTop = 0;
-            let bottomNavScrollThreshold = 5; // Minimum scroll distance to trigger
-            let bottomNavTicking = false;
+            const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+            const bottomNav = document.getElementById('mobileBottomNav');
             
-            function handleBottomNavScroll() {
-                const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-                const bottomNav = document.getElementById('mobileBottomNav');
-                
-                if (!bottomNav) {
-                    bottomNavTicking = false;
-                    return;
-                }
-                
-                // Only trigger if scroll is beyond threshold
-                if (Math.abs(scrollTop - lastBottomNavScrollTop) < bottomNavScrollThreshold) {
-                    bottomNavTicking = false;
-                    return;
-                }
-                
-                if (scrollTop > lastBottomNavScrollTop && scrollTop > 50) {
-                    // Scrolling down - hide bottom nav
-                    bottomNav.classList.add('hide');
-                } else {
-                    // Scrolling up - show bottom nav
-                    bottomNav.classList.remove('hide');
-                }
-                
-                lastBottomNavScrollTop = scrollTop <= 0 ? 0 : scrollTop;
+            if (!bottomNav) {
                 bottomNavTicking = false;
+                return;
             }
             
-            window.addEventListener('scroll', function() {
-                if (!bottomNavTicking) {
-                    window.requestAnimationFrame(handleBottomNavScroll);
-                    bottomNavTicking = true;
-                }
-            });
+            // Only trigger if scroll is beyond threshold
+            if (Math.abs(scrollTop - lastBottomNavScrollTop) < bottomNavScrollThreshold) {
+                bottomNavTicking = false;
+                return;
+            }
+            
+            if (scrollTop > lastBottomNavScrollTop && scrollTop > 50) {
+                // Scrolling down - hide bottom nav
+                bottomNav.classList.add('hide');
+            } else {
+                // Scrolling up - show bottom nav
+                bottomNav.classList.remove('hide');
+            }
+            
+            lastBottomNavScrollTop = scrollTop <= 0 ? 0 : scrollTop;
+            bottomNavTicking = false;
         }
         
-        // Initialize on load
-        initMobileBottomNavScroll();
-        
-        // Re-initialize on resize (handles device rotation)
-        let resizeTimer;
-        window.addEventListener('resize', function() {
-            clearTimeout(resizeTimer);
-            resizeTimer = setTimeout(function() {
-                initMobileBottomNavScroll();
-            }, 250);
+        window.addEventListener('scroll', function() {
+            if (!bottomNavTicking) {
+                window.requestAnimationFrame(handleBottomNavScroll);
+                bottomNavTicking = true;
+            }
         });
         
         // Handle bottom navigation search click on product pages
