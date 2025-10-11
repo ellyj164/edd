@@ -1345,6 +1345,64 @@ includeHeader($page_title);
         });
     }
     
+    // Restore form values from sessionStorage (for persistence on validation errors)
+    function restoreFormValues() {
+        try {
+            const savedValues = sessionStorage.getItem('checkoutFormValues');
+            if (savedValues) {
+                const values = JSON.parse(savedValues);
+                
+                // Restore billing fields
+                if (values.billing_name) document.getElementById('billing_name').value = values.billing_name;
+                if (values.billing_phone) {
+                    document.getElementById('billing_phone').value = values.billing_phone;
+                    // Let intl-tel-input process the number
+                    if (billingPhoneInput && billingPhoneInput.setNumber) {
+                        billingPhoneInput.setNumber(values.billing_phone);
+                    }
+                }
+                if (values.billing_line1) document.getElementById('billing_line1').value = values.billing_line1;
+                if (values.billing_line2) document.getElementById('billing_line2').value = values.billing_line2;
+                if (values.billing_city) document.getElementById('billing_city').value = values.billing_city;
+                if (values.billing_state) document.getElementById('billing_state').value = values.billing_state;
+                if (values.billing_postal) document.getElementById('billing_postal').value = values.billing_postal;
+                if (values.billing_country) {
+                    document.getElementById('billing_country').value = values.billing_country;
+                    if (typeof jQuery !== 'undefined' && jQuery.fn.select2) {
+                        jQuery('#billing_country').trigger('change');
+                    }
+                }
+                
+                // Don't auto-restore after successful load
+                sessionStorage.removeItem('checkoutFormValues');
+            }
+        } catch (error) {
+            console.error('Error restoring form values:', error);
+        }
+    }
+    
+    // Save form values to sessionStorage before submission
+    function saveFormValues() {
+        try {
+            const values = {
+                billing_name: document.getElementById('billing_name').value,
+                billing_phone: document.getElementById('billing_phone').value,
+                billing_line1: document.getElementById('billing_line1').value,
+                billing_line2: document.getElementById('billing_line2').value,
+                billing_city: document.getElementById('billing_city').value,
+                billing_state: document.getElementById('billing_state').value,
+                billing_postal: document.getElementById('billing_postal').value,
+                billing_country: document.getElementById('billing_country').value
+            };
+            sessionStorage.setItem('checkoutFormValues', JSON.stringify(values));
+        } catch (error) {
+            console.error('Error saving form values:', error);
+        }
+    }
+    
+    // Restore values on page load
+    restoreFormValues();
+    
     // Handle form submission
     const form = document.getElementById('checkout-form');
     const checkoutButton = document.getElementById('checkout-button');
@@ -1385,6 +1443,9 @@ includeHeader($page_title);
     
     form.addEventListener('submit', async function(e) {
         e.preventDefault();
+        
+        // Save form values for persistence
+        saveFormValues();
         
         // Validate phone number before submission
         if (billingPhoneInput) {
