@@ -3083,6 +3083,53 @@ body {
         display: none;
     }
 }
+
+/* Desktop Layout - Show 5 Products */
+@media (min-width: 1280px) {
+    /* Remove side padding from product shelf containers to maximize width */
+    .product-row-section .container {
+        padding: 0;
+        max-width: 1200px;
+    }
+    
+    /* Ensure products track uses full container width */
+    .products-horizontal-container {
+        overflow: hidden;
+        position: relative;
+    }
+    
+    /* Enable smooth horizontal scrolling */
+    .products-track {
+        display: flex;
+        gap: 16px;
+        overflow-x: auto;
+        scroll-behavior: smooth;
+        scrollbar-width: none; /* Hide scrollbar for Firefox */
+        -ms-overflow-style: none; /* Hide scrollbar for IE/Edge */
+        padding: 0;
+    }
+    
+    .products-track::-webkit-scrollbar {
+        display: none; /* Hide scrollbar for Chrome/Safari */
+    }
+    
+    /* Calculate card width for exactly 5 visible cards */
+    /* Container: 1200px, Gaps: 4 × 16px = 64px, Cards: (1200 - 64) / 5 = 227.2px */
+    .walmart-product-card {
+        min-width: 227.2px;
+        max-width: 227.2px;
+        flex-shrink: 0;
+        flex-grow: 0;
+    }
+    
+    /* Ensure scroll buttons are visible and properly positioned */
+    .scroll-right-btn {
+        display: flex;
+        right: 0;
+        transform: translateY(-50%);
+        z-index: 20;
+    }
+}
 </style>
 
 <!-- JavaScript for Functionality -->
