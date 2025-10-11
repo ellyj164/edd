@@ -848,13 +848,19 @@ includeHeader($page_title);
                             <small class="form-text text-muted">This will create a new brand in the system</small>
                         </div>
                     </div>
+                </div>
+                
                 <div class="col-12">
                     <label class="form-label">Short Description</label>
-                    <textarea name="short_description" class="form-control" rows="2"><?= h($form['short_description']) ?></textarea>
+                    <textarea name="short_description" id="short_description" class="form-control" rows="2" maxlength="500" oninput="updateCharacterCount()"><?= h($form['short_description']) ?></textarea>
+                    <div class="form-text">
+                        <span id="charCount">0</span> / 500 characters
+                    </div>
                 </div>
                 <div class="col-12">
                     <label class="form-label">Description</label>
-                    <textarea name="description" class="form-control" rows="6"><?= h($form['description']) ?></textarea>
+                    <textarea name="description" id="description" class="form-control" rows="6"><?= h($form['description']) ?></textarea>
+                    <small class="form-text text-muted">Use the rich text editor above to format your product description</small>
                 </div>
             </div>
         </div>
@@ -1437,6 +1443,53 @@ document.addEventListener('DOMContentLoaded', function() {
     if (isDigitalCheckbox && isDigitalCheckbox.checked) {
         toggleDigitalFields(true);
     }
+});
+</script>
+
+<!-- TinyMCE Integration -->
+<script src="https://cdn.tiny.cloud/1/no-api-key/tinymce/6/tinymce.min.js" referrerpolicy="origin"></script>
+<script>
+// Initialize TinyMCE for the description field
+tinymce.init({
+    selector: '#description',
+    height: 400,
+    menubar: false,
+    plugins: [
+        'advlist', 'autolink', 'lists', 'link', 'image', 'charmap', 'preview',
+        'anchor', 'searchreplace', 'visualblocks', 'code', 'fullscreen',
+        'insertdatetime', 'media', 'table', 'code', 'help', 'wordcount'
+    ],
+    toolbar: 'undo redo | formatselect | bold italic underline | alignleft aligncenter alignright alignjustify | bullist numlist outdent indent | link image | table | removeformat | help',
+    content_style: 'body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; font-size: 14px; }',
+    promotion: false,
+    branding: false,
+    setup: function (editor) {
+        editor.on('change', function () {
+            editor.save();
+        });
+    }
+});
+
+// Character counter for short description
+function updateCharacterCount() {
+    const textarea = document.getElementById('short_description');
+    const charCount = document.getElementById('charCount');
+    const currentLength = textarea.value.length;
+    charCount.textContent = currentLength;
+    
+    // Change color if approaching limit
+    if (currentLength > 450) {
+        charCount.style.color = '#dc2626';
+    } else if (currentLength > 400) {
+        charCount.style.color = '#f59e0b';
+    } else {
+        charCount.style.color = '#059669';
+    }
+}
+
+// Initialize character count on page load
+document.addEventListener('DOMContentLoaded', function() {
+    updateCharacterCount();
 });
 </script>
 
