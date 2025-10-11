@@ -390,6 +390,7 @@ includeHeader($page_title);
                         class="form-input" 
                         required
                     >
+                    <div id="phone-error" class="form-error" style="display: none;"></div>
                 </div>
 
                 <div class="form-group">
@@ -729,6 +730,19 @@ includeHeader($page_title);
     display: none;
 }
 
+/* Form error message styles */
+.form-error {
+    color: #dc3545;
+    font-size: 0.875rem;
+    margin-top: 6px;
+    display: none;
+}
+
+/* Invalid input state */
+.form-input.invalid {
+    border-color: #dc3545;
+}
+
 /* Select2 customization for country dropdown */
 .select2-container--default .select2-selection--single {
     height: auto !important;
@@ -754,6 +768,62 @@ includeHeader($page_title);
 .select2-search--dropdown .select2-search__field {
     padding: 8px !important;
     border: 1px solid #ddd !important;
+}
+
+/* intl-tel-input customization */
+.iti {
+    width: 100%;
+    display: block;
+}
+
+.iti__flag-container {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: 0;
+    padding: 1px;
+}
+
+.iti__selected-flag {
+    padding: 0 8px 0 20px;
+    height: 100%;
+}
+
+.iti__country-list {
+    max-height: 300px;
+    overflow-y: auto;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    border-radius: 4px;
+    margin-top: 4px;
+}
+
+.iti__country {
+    padding: 10px 15px;
+}
+
+.iti__country:hover {
+    background-color: #f5f5f5;
+}
+
+.iti__country.iti__highlight {
+    background-color: #e7f3ff;
+}
+
+/* Make phone input work with intl-tel-input */
+#billing_phone {
+    padding-left: 100px !important;
+}
+
+/* Mobile responsive adjustments */
+@media (max-width: 768px) {
+    .iti__country-list {
+        max-height: 200px;
+    }
+    
+    .select2-results__option {
+        padding: 12px 15px !important;
+        font-size: 16px !important; /* Prevents zoom on iOS */
+    }
 }
 </style>
 
@@ -881,16 +951,66 @@ includeHeader($page_title);
         }
     }
     
-    // Initialize intl-tel-input for phone fields
+    // Initialize intl-tel-input for phone fields with enhanced features
     let billingPhoneInput = null;
     const billingPhoneField = document.getElementById('billing_phone');
     
     if (billingPhoneField && window.intlTelInput) {
         billingPhoneInput = window.intlTelInput(billingPhoneField, {
-            initialCountry: 'us',
+            // Use detected country or default to US
+            initialCountry: detectedCountry ? detectedCountry.toLowerCase() : 'us',
             preferredCountries: ['us', 'rw', 'ca', 'gb', 'au', 'de', 'fr'],
             separateDialCode: true,
+            // Enable search by name and dial code
+            searchPlaceholder: 'Search by country or code',
+            // Show all countries in dropdown
+            onlyCountries: [],
+            // Format as user types
+            autoPlaceholder: 'aggressive',
+            formatOnDisplay: true,
+            nationalMode: false,
+            // Load utils for formatting and validation
             utilsScript: 'https://cdn.jsdelivr.net/npm/intl-tel-input@18.2.1/build/js/utils.js'
+        });
+        
+        // Add validation on blur
+        billingPhoneField.addEventListener('blur', function() {
+            if (billingPhoneInput && billingPhoneInput.isValidNumber) {
+                const isValid = billingPhoneInput.isValidNumber();
+                const errorMsg = document.getElementById('phone-error');
+                if (!isValid && this.value.trim()) {
+                    if (errorMsg) {
+                        errorMsg.textContent = 'Please enter a valid phone number for the selected country';
+                        errorMsg.style.display = 'block';
+                    }
+                    this.classList.add('invalid');
+                } else {
+                    if (errorMsg) {
+                        errorMsg.style.display = 'none';
+                    }
+                    this.classList.remove('invalid');
+                }
+            }
+        });
+        
+        // Sync phone country with country selector when user changes phone country
+        billingPhoneField.addEventListener('countrychange', function() {
+            if (billingPhoneInput) {
+                const selectedCountryData = billingPhoneInput.getSelectedCountryData();
+                const countryCode = selectedCountryData.iso2.toUpperCase();
+                const billingCountrySelect = document.getElementById('billing_country');
+                
+                // Update country selector if different
+                if (billingCountrySelect && billingCountrySelect.value !== countryCode) {
+                    billingCountrySelect.value = countryCode;
+                    // Trigger Select2 update
+                    if (typeof jQuery !== 'undefined' && jQuery.fn.select2) {
+                        jQuery(billingCountrySelect).trigger('change');
+                    }
+                    // Update currency display
+                    updateCurrency(countryCode);
+                }
+            }
         });
     }
     
@@ -1148,13 +1268,73 @@ includeHeader($page_title);
     populateCountrySelect(billingCountrySelect, detectedCountry || 'US');
     populateCountrySelect(shippingCountrySelect, detectedCountry || 'US');
     
-    // Initialize Select2 for searchable country dropdowns
+    // Initialize Select2 for searchable country dropdowns with enhanced options
     if (typeof jQuery !== 'undefined' && jQuery.fn.select2) {
         jQuery('.country-select').select2({
             placeholder: 'Select a country',
             allowClear: false,
-            width: '100%'
+            width: '100%',
+            // Support keyboard navigation
+            minimumResultsForSearch: 0,
+            // Custom matcher for searching by country name or dial code
+            matcher: function(params, data) {
+                // If there are no search terms, return all data
+                if (jQuery.trim(params.term) === '') {
+                    return data;
+                }
+                
+                // Skip if there is no 'text' property
+                if (typeof data.text === 'undefined') {
+                    return null;
+                }
+                
+                // Get the country data
+                const countryCode = jQuery(data.element).val();
+                const country = countries.find(c => c.code === countryCode);
+                
+                if (!country) {
+                    return null;
+                }
+                
+                // Convert search term to lowercase for case-insensitive search
+                const term = params.term.toLowerCase();
+                
+                // Search in country name
+                if (country.name.toLowerCase().indexOf(term) > -1) {
+                    return data;
+                }
+                
+                // Search in dial code (with or without +)
+                const dialCode = country.phone.replace('+', '');
+                if (dialCode.indexOf(term.replace('+', '')) > -1) {
+                    return data;
+                }
+                
+                // Search in country code
+                if (country.code.toLowerCase().indexOf(term) > -1) {
+                    return data;
+                }
+                
+                return null;
+            },
+            // ARIA labels for accessibility
+            language: {
+                inputTooShort: function() {
+                    return 'Type to search countries';
+                },
+                noResults: function() {
+                    return 'No country found';
+                },
+                searching: function() {
+                    return 'Searching...';
+                }
+            }
         });
+        
+        // Trigger initial currency update
+        if (billingCountrySelect.value) {
+            updateCurrency(billingCountrySelect.value);
+        }
     }
     
     // Listen for country selection changes to update phone code and currency
@@ -1164,6 +1344,64 @@ includeHeader($page_title);
             updateCurrency(this.value);
         });
     }
+    
+    // Restore form values from sessionStorage (for persistence on validation errors)
+    function restoreFormValues() {
+        try {
+            const savedValues = sessionStorage.getItem('checkoutFormValues');
+            if (savedValues) {
+                const values = JSON.parse(savedValues);
+                
+                // Restore billing fields
+                if (values.billing_name) document.getElementById('billing_name').value = values.billing_name;
+                if (values.billing_phone) {
+                    document.getElementById('billing_phone').value = values.billing_phone;
+                    // Let intl-tel-input process the number
+                    if (billingPhoneInput && billingPhoneInput.setNumber) {
+                        billingPhoneInput.setNumber(values.billing_phone);
+                    }
+                }
+                if (values.billing_line1) document.getElementById('billing_line1').value = values.billing_line1;
+                if (values.billing_line2) document.getElementById('billing_line2').value = values.billing_line2;
+                if (values.billing_city) document.getElementById('billing_city').value = values.billing_city;
+                if (values.billing_state) document.getElementById('billing_state').value = values.billing_state;
+                if (values.billing_postal) document.getElementById('billing_postal').value = values.billing_postal;
+                if (values.billing_country) {
+                    document.getElementById('billing_country').value = values.billing_country;
+                    if (typeof jQuery !== 'undefined' && jQuery.fn.select2) {
+                        jQuery('#billing_country').trigger('change');
+                    }
+                }
+                
+                // Don't auto-restore after successful load
+                sessionStorage.removeItem('checkoutFormValues');
+            }
+        } catch (error) {
+            console.error('Error restoring form values:', error);
+        }
+    }
+    
+    // Save form values to sessionStorage before submission
+    function saveFormValues() {
+        try {
+            const values = {
+                billing_name: document.getElementById('billing_name').value,
+                billing_phone: document.getElementById('billing_phone').value,
+                billing_line1: document.getElementById('billing_line1').value,
+                billing_line2: document.getElementById('billing_line2').value,
+                billing_city: document.getElementById('billing_city').value,
+                billing_state: document.getElementById('billing_state').value,
+                billing_postal: document.getElementById('billing_postal').value,
+                billing_country: document.getElementById('billing_country').value
+            };
+            sessionStorage.setItem('checkoutFormValues', JSON.stringify(values));
+        } catch (error) {
+            console.error('Error saving form values:', error);
+        }
+    }
+    
+    // Restore values on page load
+    restoreFormValues();
     
     // Handle form submission
     const form = document.getElementById('checkout-form');
@@ -1205,6 +1443,32 @@ includeHeader($page_title);
     
     form.addEventListener('submit', async function(e) {
         e.preventDefault();
+        
+        // Save form values for persistence
+        saveFormValues();
+        
+        // Validate phone number before submission
+        if (billingPhoneInput) {
+            const phoneField = document.getElementById('billing_phone');
+            const isValid = billingPhoneInput.isValidNumber ? billingPhoneInput.isValidNumber() : true;
+            
+            if (!isValid && phoneField.value.trim()) {
+                const errorMsg = document.getElementById('phone-error');
+                if (errorMsg) {
+                    errorMsg.textContent = 'Please enter a valid phone number for the selected country';
+                    errorMsg.style.display = 'block';
+                }
+                phoneField.classList.add('invalid');
+                phoneField.focus();
+                return;
+            }
+            
+            // Format phone number in international format
+            if (billingPhoneInput.getNumber) {
+                const formattedNumber = billingPhoneInput.getNumber();
+                phoneField.value = formattedNumber;
+            }
+        }
         
         // Disable button to prevent double submission
         setLoading(true);
